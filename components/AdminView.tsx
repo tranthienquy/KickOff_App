@@ -7,6 +7,7 @@ import { ref as sRef, uploadBytesResumable, getDownloadURL } from 'firebase/stor
 const AdminView: React.FC = () => {
   const [state, setState] = useState<AppState | null>(null);
   const [deviceStats, setDeviceStats] = useState({ online: 0, offline: 0 });
+  const [waitingUrl, setWaitingUrl] = useState('');
   const [countdownUrl, setCountdownUrl] = useState('');
   const [activatedUrl, setActivatedUrl] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
@@ -14,6 +15,7 @@ const AdminView: React.FC = () => {
   const [uploadProgress, setUploadProgress] = useState<{ [key: string]: number }>({});
   
   const connected = isFirebaseConnected();
+  const waitingInputRef = useRef<HTMLInputElement>(null);
   const countdownInputRef = useRef<HTMLInputElement>(null);
   const activatedInputRef = useRef<HTMLInputElement>(null);
 
@@ -23,6 +25,7 @@ const AdminView: React.FC = () => {
     const unsubscribeState = syncState((newState) => {
       setState(newState);
       setPendingStatus(null);
+      if (!waitingUrl) setWaitingUrl(newState.waitingUrl);
       if (!countdownUrl) setCountdownUrl(newState.countdownUrl);
       if (!activatedUrl) setActivatedUrl(newState.activatedUrl);
     });
@@ -42,7 +45,7 @@ const AdminView: React.FC = () => {
     await updateStatus(status);
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'countdown' | 'activated') => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'waiting' | 'countdown' | 'activated') => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!storage) { alert("LỖI: Firebase Storage chưa kết nối."); return; }
@@ -58,7 +61,9 @@ const AdminView: React.FC = () => {
         (err) => { alert(err.message); setUploadProgress(prev => ({ ...prev, [type]: 0 })); }, 
         async () => {
           const url = await getDownloadURL(uploadTask.snapshot.ref);
-          if (type === 'countdown') setCountdownUrl(url); else setActivatedUrl(url);
+          if (type === 'waiting') setWaitingUrl(url);
+          else if (type === 'countdown') setCountdownUrl(url); 
+          else setActivatedUrl(url);
           setUploadProgress(prev => ({ ...prev, [type]: 0 }));
           e.target.value = '';
         }
@@ -68,7 +73,7 @@ const AdminView: React.FC = () => {
 
   const handleUpdateUrls = async () => {
     setIsUpdating(true);
-    try { await updateUrls(countdownUrl, activatedUrl); alert('SYNC COMPLETE.'); }
+    try { await updateUrls(waitingUrl, countdownUrl, activatedUrl); alert('SYNC COMPLETE.'); }
     catch (e) { alert('Error: ' + (e as Error).message); }
     finally { setIsUpdating(false); }
   };
@@ -139,6 +144,7 @@ const AdminView: React.FC = () => {
           
           <div className="space-y-8">
             {[
+              { label: '0. CLIP NỀN (WAITING)', url: waitingUrl, set: setWaitingUrl, ref: waitingInputRef, prog: uploadProgress.waiting, type: 'waiting' },
               { label: '1. CLIP CHỜ SOURCE', url: countdownUrl, set: setCountdownUrl, ref: countdownInputRef, prog: uploadProgress.countdown, type: 'countdown' },
               { label: '2. CLIP CHÍNH SOURCE', url: activatedUrl, set: setActivatedUrl, ref: activatedInputRef, prog: uploadProgress.activated, type: 'activated' }
             ].map((field, i) => (

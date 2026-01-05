@@ -115,9 +115,9 @@ export const updateStatus = (status: AppState['status']) => {
   localListeners.forEach(l => l(localState));
 };
 
-export const updateUrls = (countdownUrl: string, activatedUrl: string) => {
-  if (stateRef) return update(stateRef, { countdownUrl, activatedUrl, timestamp: getServerTime() });
-  localState = { ...localState, countdownUrl, activatedUrl, timestamp: getServerTime() };
+export const updateUrls = (waitingUrl: string, countdownUrl: string, activatedUrl: string) => {
+  if (stateRef) return update(stateRef, { waitingUrl, countdownUrl, activatedUrl, timestamp: getServerTime() });
+  localState = { ...localState, waitingUrl, countdownUrl, activatedUrl, timestamp: getServerTime() };
   localListeners.forEach(l => l(localState));
 };
 
