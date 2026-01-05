@@ -1,8 +1,8 @@
 
 import React, { useState } from 'react';
 import { HashRouter, Routes, Route, Link, useLocation } from 'react-router-dom';
-import ClientView from './components/ClientView';
-import AdminView from './components/AdminView';
+import ClientView from './components/ClientView.tsx';
+import AdminView from './components/AdminView.tsx';
 
 const NavigationHelper = () => {
   const [showNav, setShowNav] = useState(false);

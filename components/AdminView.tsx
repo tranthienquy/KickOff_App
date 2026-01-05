@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { AppState, EventStatus } from '../types';
-import { syncState, updateStatus, updateUrls, resetSystem, isFirebaseConnected, storage } from '../services/firebase';
+import { AppState, EventStatus } from '../types.ts';
+import { syncState, updateStatus, updateUrls, resetSystem, isFirebaseConnected, storage } from '../services/firebase.ts';
 import { ref as sRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 
 const AdminView: React.FC = () => {
@@ -85,8 +85,6 @@ const AdminView: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#020617] text-slate-200 font-inter p-6 pb-24">
       <div className="max-w-4xl mx-auto space-y-8">
-        
-        {/* Header */}
         <div className="flex justify-between items-center p-6 bg-slate-900/50 border border-slate-800 rounded-2xl">
           <div>
             <h1 className="text-xl font-orbitron font-bold text-white flex items-center gap-3 uppercase tracking-wider">
@@ -99,11 +97,10 @@ const AdminView: React.FC = () => {
           </div>
           <div className="px-6 py-2 bg-slate-950 border border-slate-800 rounded-xl">
              <div className="text-[9px] text-slate-500 font-orbitron uppercase">Global State</div>
-             <div className="text-cyan-400 font-orbitron font-bold text-sm uppercase">{state.status === 'countdown' ? 'CLIP CHỜ' : state.status}</div>
+             <div className="text-cyan-400 font-orbitron font-bold text-sm uppercase">{state.status}</div>
           </div>
         </div>
 
-        {/* Action Grid - Simplified to 3 main states */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <button 
             onClick={() => updateStatus(EventStatus.WAITING)}
@@ -130,12 +127,10 @@ const AdminView: React.FC = () => {
           </button>
         </div>
 
-        {/* Media Config */}
         <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-8 md:p-10 space-y-10">
           <h2 className="text-sm font-orbitron font-bold text-slate-400 uppercase tracking-[0.2em] border-b border-slate-800 pb-4">Media Sources</h2>
           
           <div className="space-y-12">
-            {/* Input Group 1 */}
             <div className="space-y-4">
               <label className="text-[11px] font-orbitron text-slate-500 uppercase tracking-widest">1. Clip Chờ Video URL / File</label>
               <div className="flex gap-2">
@@ -151,7 +146,6 @@ const AdminView: React.FC = () => {
               </div>
             </div>
 
-            {/* Input Group 2 */}
             <div className="space-y-4">
               <label className="text-[11px] font-orbitron text-slate-500 uppercase tracking-widest">2. Clip Phát Chính Video URL / File</label>
               <div className="flex gap-2">

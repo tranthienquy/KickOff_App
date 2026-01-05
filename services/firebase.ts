@@ -2,7 +2,7 @@
 import { initializeApp } from 'firebase/app';
 import { getDatabase, ref, onValue, set, update, Database } from 'firebase/database';
 import { getStorage, FirebaseStorage } from 'firebase/storage';
-import { AppState, INITIAL_STATE } from '../types';
+import { AppState, INITIAL_STATE } from '../types.ts';
 
 const firebaseConfig = {
   apiKey: "AIzaSyCLMKqjAdZQYtmNloq05uQpqMAIKQYgo1Y",
