@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { HashRouter, Routes, Route, Link, useLocation } from 'react-router-dom';
 import ClientView from './components/ClientView.tsx';
@@ -42,7 +41,7 @@ const NavigationHelper = () => {
 
 const App: React.FC = () => {
   return (
-    <HashRouter>
+    <HashRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Routes>
         <Route path="/" element={<ClientView />} />
         <Route path="/admin" element={<AdminView />} />

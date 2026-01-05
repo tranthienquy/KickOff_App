@@ -1,66 +1,77 @@
-
-import { initializeApp } from 'firebase/app';
-import { getDatabase, ref, onValue, set, update, Database, onDisconnect, push, serverTimestamp } from 'firebase/database';
+import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
+import { getDatabase, ref, onValue, set, update, onDisconnect, push, Database } from 'firebase/database';
 import { getStorage, FirebaseStorage } from 'firebase/storage';
+import { getAnalytics, isSupported } from 'firebase/analytics';
 import { AppState, INITIAL_STATE } from '../types.ts';
 
+// Cấu hình Firebase cho dự án: kickoffai
 const firebaseConfig = {
-  apiKey: "AIzaSyCLMKqjAdZQYtmNloq05uQpqMAIKQYgo1Y",
-  authDomain: "ai-young-guru-55339.firebaseapp.com",
-  databaseURL: "https://ai-young-guru-55339-default-rtdb.firebaseio.com",
-  projectId: "ai-young-guru-55339",
-  storageBucket: "ai-young-guru-55339.firebasestorage.app",
-  messagingSenderId: "441913380578",
-  appId: "1:441913380578:web:bfacc21705c626c5ff58bb",
-  measurementId: "G-KW4NTD3Z2Z"
+  apiKey: "AIzaSyCu1q7vYsj7y-qKK5GQOrT0aOe5OT1SdqU",
+  authDomain: "kickoffai.firebaseapp.com",
+  databaseURL: "https://kickoffai-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "kickoffai",
+  storageBucket: "kickoffai.firebasestorage.app",
+  messagingSenderId: "861461142168",
+  appId: "1:861461142168:web:3d64ab128f0698032a8eed",
+  measurementId: "G-RMCX2NSLTE"
 };
 
-const isConfigValid = !!firebaseConfig.apiKey && firebaseConfig.apiKey !== "YOUR_API_KEY";
-
+let app: FirebaseApp;
 let db: Database | null = null;
 let storage: FirebaseStorage | null = null;
 let serverTimeOffset = 0;
 
-if (isConfigValid) {
-  try {
-    const app = initializeApp(firebaseConfig);
-    db = getDatabase(app);
-    storage = getStorage(app);
-    
-    const offsetRef = ref(db, ".info/serverTimeOffset");
-    onValue(offsetRef, (snap) => {
-      serverTimeOffset = snap.val() || 0;
-    });
-
-  } catch (error) {
-    console.error("❌ Firebase Init Error:", error);
+try {
+  // Chỉ khởi tạo 1 lần duy nhất
+  if (!getApps().length) {
+    app = initializeApp(firebaseConfig);
+  } else {
+    app = getApp();
   }
+  
+  // Khởi tạo các service
+  db = getDatabase(app);
+  storage = getStorage(app);
+  
+  if (typeof window !== 'undefined') {
+    // Check if analytics is supported before initializing to avoid cookie errors
+    isSupported().then((supported) => {
+      if (supported) {
+        getAnalytics(app);
+      }
+    }).catch((err) => {
+      console.warn("Firebase Analytics not supported in this environment:", err);
+    });
+  }
+  
+  console.log("🚀 Firebase Initialization: Success (kickoffai)");
+
+  const offsetRef = ref(db, ".info/serverTimeOffset");
+  onValue(offsetRef, (snap) => {
+    serverTimeOffset = snap.val() || 0;
+  });
+} catch (error) {
+  console.error("❌ Firebase Critical Error:", error);
 }
 
 const stateRef = db ? ref(db, 'eventState') : null;
 const connectionsRef = db ? ref(db, 'activeConnections') : null;
 
-export { storage };
+export { storage, db };
 
 export const getServerTime = () => Date.now() + serverTimeOffset;
 
-// Theo dõi thiết bị kết nối với trạng thái Online/Offline
 export const trackDevice = () => {
   if (!db || !connectionsRef) return;
   
   const connectedRef = ref(db, ".info/connected");
   onValue(connectedRef, (snap) => {
     if (snap.val() === true) {
-      // Tạo một session duy nhất cho lần truy cập này
       const myConnectionRef = push(connectionsRef);
-      
-      // Khi mất kết nối, CẬP NHẬT trạng thái thay vì xóa
       onDisconnect(myConnectionRef).update({
         online: false,
         lastSeen: getServerTime()
       });
-
-      // Đánh dấu thiết bị đang online
       set(myConnectionRef, {
         online: true,
         lastSeen: getServerTime(),
@@ -71,7 +82,6 @@ export const trackDevice = () => {
   });
 };
 
-// Lấy thống kê thiết bị
 export const syncDeviceStats = (callback: (stats: { online: number, offline: number }) => void) => {
   if (!connectionsRef) return () => {};
   return onValue(connectionsRef, (snap) => {
@@ -89,36 +99,44 @@ export const syncDeviceStats = (callback: (stats: { online: number, offline: num
   });
 };
 
-let localState = { ...INITIAL_STATE };
-let localListeners: ((state: AppState) => void)[] = [];
-
 export const syncState = (callback: (state: AppState) => void) => {
-  if (stateRef) {
-    return onValue(stateRef, (snapshot) => {
-      const data = snapshot.val();
-      if (data) callback(data);
-      else {
-        set(stateRef, { ...INITIAL_STATE, timestamp: getServerTime() });
-        callback(INITIAL_STATE);
-      }
-    });
-  } else {
-    setTimeout(() => callback(localState), 0);
-    localListeners.push(callback);
-    return () => { localListeners = localListeners.filter(l => l !== callback); };
+  if (!stateRef) {
+    // Nếu không kết nối được Firebase, dùng state mặc định để app không bị trắng trang
+    console.warn("⚠️ Firebase Sync Warning: Running in offline/demo mode.");
+    callback({ ...INITIAL_STATE, timestamp: Date.now() });
+    return () => {};
   }
+  
+  return onValue(stateRef, (snapshot) => {
+    const data = snapshot.val();
+    if (data) {
+      const keys = Object.keys(INITIAL_STATE) as Array<keyof AppState>;
+      const isMissingFields = keys.some(key => data[key] === undefined);
+
+      if (isMissingFields) {
+        const healedData = { ...INITIAL_STATE, ...data };
+        set(stateRef, healedData);
+        callback(healedData);
+      } else {
+        callback(data);
+      }
+    } else {
+      console.log("🆕 Initializing default state...");
+      const initial = { ...INITIAL_STATE, timestamp: getServerTime() };
+      set(stateRef, initial);
+      callback(initial);
+    }
+  }, (error) => {
+    console.error("❌ Firebase Sync Error:", error);
+  });
 };
 
 export const updateStatus = (status: AppState['status']) => {
   if (stateRef) return update(stateRef, { status, timestamp: getServerTime() });
-  localState = { ...localState, status, timestamp: getServerTime() };
-  localListeners.forEach(l => l(localState));
 };
 
-export const updateUrls = (waitingUrl: string, countdownUrl: string, activatedUrl: string) => {
-  if (stateRef) return update(stateRef, { waitingUrl, countdownUrl, activatedUrl, timestamp: getServerTime() });
-  localState = { ...localState, waitingUrl, countdownUrl, activatedUrl, timestamp: getServerTime() };
-  localListeners.forEach(l => l(localState));
+export const updateEventConfig = (config: Partial<AppState>) => {
+  if (stateRef) return update(stateRef, { ...config, timestamp: getServerTime() });
 };
 
-export const isFirebaseConnected = () => isConfigValid && !!storage;
+export const isFirebaseConnected = () => !!db;
