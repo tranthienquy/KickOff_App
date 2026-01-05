@@ -19,13 +19,21 @@ const isConfigValid = !!firebaseConfig.apiKey && firebaseConfig.apiKey !== "YOUR
 
 let db: Database | null = null;
 let storage: FirebaseStorage | null = null;
+let serverTimeOffset = 0;
 
 if (isConfigValid) {
   try {
     const app = initializeApp(firebaseConfig);
     db = getDatabase(app);
     storage = getStorage(app);
-    console.log("✅ Firebase initialized. Storage Bucket:", firebaseConfig.storageBucket);
+    
+    // Theo dõi độ lệch thời gian giữa Client và Server
+    const offsetRef = ref(db, ".info/serverTimeOffset");
+    onValue(offsetRef, (snap) => {
+      serverTimeOffset = snap.val() || 0;
+      console.log("⏰ Server time offset updated:", serverTimeOffset, "ms");
+    });
+
   } catch (error) {
     console.error("❌ Firebase Init Error:", error);
   }
@@ -34,6 +42,9 @@ if (isConfigValid) {
 const stateRef = db ? ref(db, 'eventState') : null;
 
 export { storage };
+
+// Hàm lấy thời gian chuẩn đã đồng bộ với Server
+export const getServerTime = () => Date.now() + serverTimeOffset;
 
 let localState = { ...INITIAL_STATE };
 let localListeners: ((state: AppState) => void)[] = [];
@@ -44,7 +55,7 @@ export const syncState = (callback: (state: AppState) => void) => {
       const data = snapshot.val();
       if (data) callback(data);
       else {
-        set(stateRef, INITIAL_STATE);
+        set(stateRef, { ...INITIAL_STATE, timestamp: getServerTime() });
         callback(INITIAL_STATE);
       }
     });
@@ -56,20 +67,21 @@ export const syncState = (callback: (state: AppState) => void) => {
 };
 
 export const updateStatus = (status: AppState['status']) => {
-  if (stateRef) return update(stateRef, { status, timestamp: Date.now() });
-  localState = { ...localState, status, timestamp: Date.now() };
+  if (stateRef) return update(stateRef, { status, timestamp: getServerTime() });
+  localState = { ...localState, status, timestamp: getServerTime() };
   localListeners.forEach(l => l(localState));
 };
 
 export const updateUrls = (countdownUrl: string, activatedUrl: string) => {
-  if (stateRef) return update(stateRef, { countdownUrl, activatedUrl, timestamp: Date.now() });
-  localState = { ...localState, countdownUrl, activatedUrl, timestamp: Date.now() };
+  if (stateRef) return update(stateRef, { countdownUrl, activatedUrl, timestamp: getServerTime() });
+  localState = { ...localState, countdownUrl, activatedUrl, timestamp: getServerTime() };
   localListeners.forEach(l => l(localState));
 };
 
 export const resetSystem = () => {
-  if (stateRef) return set(stateRef, INITIAL_STATE);
-  localState = { ...INITIAL_STATE };
+  const resetState = { ...INITIAL_STATE, timestamp: getServerTime() };
+  if (stateRef) return set(stateRef, resetState);
+  localState = resetState;
   localListeners.forEach(l => l(localState));
 };
 
