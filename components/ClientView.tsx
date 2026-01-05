@@ -18,7 +18,6 @@ const ClientView: React.FC = () => {
     const unsubscribe = syncState((newState) => {
       const prev = prevStateRef.current;
       
-      // Kiểm tra sự thay đổi status hoặc timestamp (để đồng bộ lại khi Admin nhấn lại nút cũ)
       const hasChanged = !prev || 
         newState.status !== prev.status || 
         newState.timestamp !== prev.timestamp ||
@@ -26,11 +25,14 @@ const ClientView: React.FC = () => {
         newState.activatedUrl !== prev.activatedUrl;
 
       if (hasChanged && newState.status !== EventStatus.WAITING) {
+        // Bật loading ngay lập tức khi có sự thay đổi
         setIsMediaLoading(true);
+        
+        // Timeout dự phòng (fallback) rút ngắn xuống còn 2s thay vì 4s
         if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
         loadingTimeoutRef.current = setTimeout(() => {
           setIsMediaLoading(false);
-        }, 4000);
+        }, 2000);
       }
 
       prevStateRef.current = newState;
@@ -50,30 +52,30 @@ const ClientView: React.FC = () => {
       const url = isMuted ? state.countdownUrl : state.activatedUrl;
       const media = getMediaSource(url, isMuted);
 
-      // Tính toán độ trễ (elapsed time) tính bằng giây
       const elapsedSeconds = Math.max(0, (Date.now() - state.timestamp) / 1000);
 
       if (media.type === 'native' && videoRef.current) {
-        videoRef.current.src = media.src;
+        // Tối ưu: Chỉ reload nếu SRC thay đổi để tránh giật hình khi sync timestamp
+        if (videoRef.current.src !== media.src) {
+          videoRef.current.src = media.src;
+          videoRef.current.load();
+        }
+        
         videoRef.current.muted = isMuted;
         videoRef.current.loop = isMuted;
-        videoRef.current.load();
-        
-        // Nhảy đến đúng vị trí thời gian đã trôi qua
         videoRef.current.currentTime = elapsedSeconds;
         
         const playPromise = videoRef.current.play();
         if (playPromise !== undefined) {
           playPromise.catch(error => {
-            console.error("Autoplay failed:", error);
+            console.warn("Autoplay deferred:", error);
             setTimeout(() => {
               if (videoRef.current) {
-                // Thử đồng bộ lại lần nữa khi phát lại
                 const retryElapsed = Math.max(0, (Date.now() - state.timestamp) / 1000);
                 videoRef.current.currentTime = retryElapsed;
                 videoRef.current.play();
               }
-            }, 1000);
+            }, 500);
           });
         }
       }
@@ -82,14 +84,16 @@ const ClientView: React.FC = () => {
 
   const handleUnlock = () => {
     setUnlocked(true);
+    // Priming audio context ngay lập tức
     if (videoRef.current) {
       videoRef.current.play().then(() => {
         videoRef.current?.pause();
-      }).catch(e => console.log("Priming failed", e));
+      }).catch(() => {});
     }
   };
 
   const handleMediaReady = () => {
+    // Xóa ngay màn hình loading khi video thực sự phát (playing) hoặc đã sẵn sàng
     if (loadingTimeoutRef.current) {
       clearTimeout(loadingTimeoutRef.current);
       loadingTimeoutRef.current = null;
@@ -100,8 +104,6 @@ const ClientView: React.FC = () => {
   const getMediaSource = (url: string, isMuted: boolean = true) => {
     const youtubeRegex = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
     const match = url.match(youtubeRegex);
-    
-    // Tính toán thời gian bắt đầu cho YouTube (&start=...)
     const startParam = state ? Math.floor(Math.max(0, (Date.now() - state.timestamp) / 1000)) : 0;
 
     if (match && match[2].length === 11) {
@@ -116,7 +118,7 @@ const ClientView: React.FC = () => {
 
   if (!state) return (
     <div className="h-screen w-screen flex items-center justify-center bg-[#000510]">
-      <div className="text-cyan-400 animate-pulse font-orbitron tracking-widest text-xs">ESTABLISHING UPLINK...</div>
+      <div className="text-cyan-400 animate-pulse font-orbitron tracking-widest text-[10px]">SYNCING WITH CLOUD...</div>
     </div>
   );
 
@@ -128,17 +130,25 @@ const ClientView: React.FC = () => {
   return (
     <div className="h-screen w-screen relative overflow-hidden bg-[#000510] bg-grid selection:bg-none">
       
-      <div className={`absolute inset-0 z-10 bg-black transition-opacity duration-1000 ${showMedia ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
-        {/* NATIVE VIDEO PLAYER */}
+      <div className={`absolute inset-0 z-10 bg-black transition-opacity duration-500 ${showMedia ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+        {/* NATIVE VIDEO PLAYER - Thêm preload="auto" để buffer nhanh nhất */}
         <video 
           ref={videoRef}
           className={`w-full h-full object-cover ${currentMedia.type === 'native' ? 'block' : 'hidden'}`}
           playsInline 
-          onLoadedData={handleMediaReady}
+          preload="auto"
           onPlaying={handleMediaReady}
+          onCanPlay={handleMediaReady}
+          onLoadedMetadata={() => {
+             // Đồng bộ lại time ngay khi metadata sẵn sàng để tránh "nhảy" hình
+             if(videoRef.current && state) {
+               const accurateElapsed = Math.max(0, (Date.now() - state.timestamp) / 1000);
+               videoRef.current.currentTime = accurateElapsed;
+             }
+          }}
         />
 
-        {/* YOUTUBE PLAYER - Sử dụng key bao gồm timestamp để force reload iframe khi Admin nhấn lại */}
+        {/* YOUTUBE PLAYER */}
         {currentMedia.type === 'youtube' && showMedia && (
           <iframe 
             ref={iframeRef}
@@ -152,61 +162,48 @@ const ClientView: React.FC = () => {
         )}
         
         {state.status === EventStatus.COUNTDOWN && (
-          <div className="absolute bottom-8 left-8 z-50 px-4 py-2 border border-cyan-500/20 bg-black/60 backdrop-blur-md rounded-md">
-             <div className="text-[9px] font-orbitron text-cyan-400 tracking-[0.3em] animate-pulse uppercase">
-               Synchronized Uplink Active
-             </div>
-          </div>
-        )}
-
-        {state.status === EventStatus.ACTIVATED && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-40">
-             <div className="w-full border-y border-white/5 py-8 bg-white/[0.02] backdrop-blur-sm animate-in zoom-in fade-in duration-1000">
-                <div className="text-center">
-                  <h2 className="text-7xl md:text-[12rem] font-orbitron font-bold text-white glow-text tracking-tighter opacity-20 uppercase">Launch</h2>
-                </div>
+          <div className="absolute bottom-8 left-8 z-50 px-3 py-1 border border-cyan-500/10 bg-black/40 backdrop-blur-sm rounded">
+             <div className="text-[8px] font-orbitron text-cyan-400/60 tracking-[0.2em] uppercase">
+               Sync Stream Active
              </div>
           </div>
         )}
       </div>
 
-      {/* Buffering/Syncing State Overlay */}
+      {/* Tối ưu Overlay Loading - mỏng nhẹ và biến mất nhanh hơn */}
       {unlocked && isMediaLoading && (
-        <div className="absolute inset-0 z-[150] flex flex-col items-center justify-center bg-[#000510]/95 backdrop-blur-md">
-          <div className="w-48 h-1 bg-slate-900 rounded-full overflow-hidden border border-cyan-500/20">
-             <div className="h-full bg-cyan-500 animate-[loading_1.5s_infinite_ease-in-out]"></div>
+        <div className="absolute inset-0 z-[150] flex flex-col items-center justify-center bg-[#000510]/80 backdrop-blur-sm transition-opacity duration-300">
+          <div className="w-32 h-[2px] bg-slate-900 rounded-full overflow-hidden border border-cyan-500/10">
+             <div className="h-full bg-cyan-400 animate-[loading_0.8s_infinite_linear]"></div>
           </div>
-          <div className="mt-4 text-[9px] font-orbitron text-cyan-500 tracking-[0.3em] animate-pulse">RECALIBRATING TIME SYNC...</div>
         </div>
       )}
 
       {!unlocked && (
         <div className="absolute inset-0 z-[200] flex flex-col items-center justify-center bg-[#000510]">
-          <div className="absolute inset-0 opacity-20 pointer-events-none bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-cyan-500/30 via-transparent to-transparent"></div>
+          <div className="absolute inset-0 opacity-10 pointer-events-none bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-cyan-500/30 via-transparent to-transparent"></div>
           <div className="text-center space-y-12 z-10 px-6">
             <h1 className="text-5xl md:text-8xl font-orbitron font-bold text-white glow-text tracking-tighter">
               AI <span className="text-cyan-400">YOUNG</span> GURU
             </h1>
-            <p className="text-cyan-500/60 font-orbitron tracking-[0.5em] text-[10px] md:text-sm uppercase">Secure Event Node v2.7 [SYNC-READY]</p>
+            <p className="text-cyan-500/40 font-orbitron tracking-[0.4em] text-[9px] md:text-xs uppercase">High Speed Node v2.8</p>
             <button 
               onClick={handleUnlock}
-              className="group relative px-12 py-6 bg-transparent overflow-hidden border border-cyan-500/50 rounded-lg hover:border-cyan-400 transition-colors"
+              className="group relative px-10 py-5 bg-transparent overflow-hidden border border-cyan-500/30 rounded-lg hover:border-cyan-400 transition-all"
             >
-              <div className="absolute inset-0 bg-cyan-500/10 transform translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
-              <span className="relative z-10 font-orbitron font-bold text-lg text-cyan-400 transition-colors uppercase tracking-[0.2em]">INITIALIZE SYSTEM</span>
+              <div className="absolute inset-0 bg-cyan-500/5 transform translate-y-full group-hover:translate-y-0 transition-transform duration-200"></div>
+              <span className="relative z-10 font-orbitron font-bold text-sm text-cyan-400 tracking-[0.2em]">INIT SYSTEM</span>
             </button>
           </div>
         </div>
       )}
 
-      <div className={`h-full w-full flex flex-col items-center justify-center transition-all duration-1000 ${state.status === EventStatus.WAITING ? 'opacity-100 scale-100' : 'opacity-0 scale-95 pointer-events-none'}`}>
+      <div className={`h-full w-full flex flex-col items-center justify-center transition-all duration-700 ${state.status === EventStatus.WAITING ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
         <div className="relative">
-          <div className="w-64 h-64 md:w-80 md:h-80 rounded-full border border-cyan-500/10 flex items-center justify-center">
-            <div className="absolute inset-0 rounded-full border-t-2 border-cyan-500/40 animate-spin duration-[3s]"></div>
-            <div className="absolute inset-4 rounded-full border-b-2 border-cyan-500/20 animate-spin-reverse duration-[5s]"></div>
+          <div className="w-48 h-48 md:w-64 md:h-64 rounded-full border border-cyan-500/5 flex items-center justify-center">
+            <div className="absolute inset-0 rounded-full border-t border-cyan-500/20 animate-spin duration-[4s]"></div>
             <div className="flex flex-col items-center justify-center text-center">
-               <div className="text-cyan-500/40 font-orbitron text-[9px] mb-2 tracking-[0.4em] uppercase">Node Status</div>
-               <div className="text-3xl md:text-4xl font-orbitron font-bold text-white glow-text uppercase tracking-widest">Standby</div>
+               <div className="text-3xl font-orbitron font-bold text-white/80 glow-text uppercase tracking-widest">Standby</div>
             </div>
           </div>
         </div>
@@ -217,17 +214,10 @@ const ClientView: React.FC = () => {
           0% { transform: translateX(-100%); }
           100% { transform: translateX(100%); }
         }
-        @keyframes spin-reverse {
-          from { transform: rotate(360deg); }
-          to { transform: rotate(0deg); }
-        }
-        .animate-spin-reverse {
-          animation: spin-reverse linear infinite;
-        }
         .bg-grid {
-          background-image: linear-gradient(to right, rgba(0, 242, 255, 0.02) 1px, transparent 1px),
-                            linear-gradient(to bottom, rgba(0, 242, 255, 0.02) 1px, transparent 1px);
-          background-size: 50px 50px;
+          background-image: linear-gradient(to right, rgba(0, 242, 255, 0.01) 1px, transparent 1px),
+                            linear-gradient(to bottom, rgba(0, 242, 255, 0.01) 1px, transparent 1px);
+          background-size: 60px 60px;
         }
       `}</style>
     </div>
