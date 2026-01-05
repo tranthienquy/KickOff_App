@@ -1,6 +1,6 @@
 
 import { initializeApp } from 'firebase/app';
-import { getDatabase, ref, onValue, set, update, Database, onDisconnect, push } from 'firebase/database';
+import { getDatabase, ref, onValue, set, update, Database, onDisconnect, push, serverTimestamp } from 'firebase/database';
 import { getStorage, FirebaseStorage } from 'firebase/storage';
 import { AppState, INITIAL_STATE } from '../types.ts';
 
@@ -44,31 +44,48 @@ export { storage };
 
 export const getServerTime = () => Date.now() + serverTimeOffset;
 
-// Theo dõi thiết bị kết nối
+// Theo dõi thiết bị kết nối với trạng thái Online/Offline
 export const trackDevice = () => {
   if (!db || !connectionsRef) return;
   
   const connectedRef = ref(db, ".info/connected");
   onValue(connectedRef, (snap) => {
     if (snap.val() === true) {
+      // Tạo một session duy nhất cho lần truy cập này
       const myConnectionRef = push(connectionsRef);
-      // Khi mất kết nối, tự động xóa node này
-      onDisconnect(myConnectionRef).remove();
+      
+      // Khi mất kết nối, CẬP NHẬT trạng thái thay vì xóa
+      onDisconnect(myConnectionRef).update({
+        online: false,
+        lastSeen: getServerTime()
+      });
+
       // Đánh dấu thiết bị đang online
       set(myConnectionRef, {
+        online: true,
         lastSeen: getServerTime(),
-        userAgent: navigator.userAgent
+        userAgent: navigator.userAgent,
+        connectedAt: getServerTime()
       });
     }
   });
 };
 
-// Lấy số lượng thiết bị đang online
-export const syncDeviceCount = (callback: (count: number) => void) => {
+// Lấy thống kê thiết bị
+export const syncDeviceStats = (callback: (stats: { online: number, offline: number }) => void) => {
   if (!connectionsRef) return () => {};
   return onValue(connectionsRef, (snap) => {
     const data = snap.val();
-    callback(data ? Object.keys(data).length : 0);
+    let online = 0;
+    let offline = 0;
+    
+    if (data) {
+      Object.values(data).forEach((device: any) => {
+        if (device.online === true) online++;
+        else offline++;
+      });
+    }
+    callback({ online, offline });
   });
 };
 

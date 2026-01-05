@@ -1,12 +1,12 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { AppState, EventStatus } from '../types.ts';
-import { syncState, updateStatus, updateUrls, isFirebaseConnected, storage, syncDeviceCount, trackDevice } from '../services/firebase.ts';
+import { syncState, updateStatus, updateUrls, isFirebaseConnected, storage, syncDeviceStats, trackDevice } from '../services/firebase.ts';
 import { ref as sRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 
 const AdminView: React.FC = () => {
   const [state, setState] = useState<AppState | null>(null);
-  const [deviceCount, setDeviceCount] = useState(0);
+  const [deviceStats, setDeviceStats] = useState({ online: 0, offline: 0 });
   const [countdownUrl, setCountdownUrl] = useState('');
   const [activatedUrl, setActivatedUrl] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
@@ -18,7 +18,6 @@ const AdminView: React.FC = () => {
   const activatedInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    // Admin cũng tính là 1 thiết bị kết nối
     trackDevice();
 
     const unsubscribeState = syncState((newState) => {
@@ -28,8 +27,8 @@ const AdminView: React.FC = () => {
       if (!activatedUrl) setActivatedUrl(newState.activatedUrl);
     });
 
-    const unsubscribeDevices = syncDeviceCount((count) => {
-      setDeviceCount(count);
+    const unsubscribeDevices = syncDeviceStats((stats) => {
+      setDeviceStats(stats);
     });
 
     return () => {
@@ -90,15 +89,23 @@ const AdminView: React.FC = () => {
               <span className={`w-2.5 h-2.5 rounded-full ${connected ? 'bg-emerald-500 shadow-[0_0_10px_#10b981]' : 'bg-red-500'}`}></span>
               COMMAND CENTER
             </h1>
-            <div className="flex items-center gap-2 text-slate-400">
-              <span className="inline-block w-2 h-2 rounded-full bg-cyan-500 animate-pulse"></span>
-              <span className="text-[10px] font-orbitron uppercase tracking-widest">
-                {deviceCount} DEVICES ONLINE
-              </span>
+            <div className="flex flex-wrap items-center gap-4 text-slate-400">
+              <div className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                <span className="text-[10px] font-orbitron uppercase tracking-widest text-emerald-400">
+                  {deviceStats.online} Online
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-slate-600"></span>
+                <span className="text-[10px] font-orbitron uppercase tracking-widest text-slate-500">
+                  {deviceStats.offline} Disconnected
+                </span>
+              </div>
             </div>
           </div>
           <div className="px-4 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-cyan-400 font-orbitron text-[10px] font-bold uppercase tracking-tighter">
-            System: {state.status}
+            System Status: {state.status}
           </div>
         </div>
 
@@ -114,7 +121,7 @@ const AdminView: React.FC = () => {
               disabled={pendingStatus === btn.id}
               className={`p-6 rounded-xl border transition-all duration-150 active:scale-95 flex flex-col items-center gap-3 ${
                 state.status === btn.id 
-                  ? `bg-${btn.color}-500/20 border-${btn.color}-500 shadow-lg` 
+                  ? `bg-${btn.color}-500/20 border-${btn.color}-500 shadow-lg shadow-${btn.color}-500/10` 
                   : 'bg-slate-900 border-slate-800 hover:border-slate-700'
               } ${pendingStatus === btn.id ? 'opacity-70 animate-pulse' : ''}`}
             >
@@ -125,7 +132,10 @@ const AdminView: React.FC = () => {
         </div>
 
         <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 md:p-8 space-y-8 shadow-2xl">
-          <h2 className="text-xs font-orbitron font-bold text-slate-500 uppercase tracking-widest">Media Asset Management</h2>
+          <h2 className="text-xs font-orbitron font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
+            <span className="w-4 h-[1px] bg-slate-700"></span>
+            Media Asset Management
+          </h2>
           
           <div className="space-y-8">
             {[
@@ -137,10 +147,10 @@ const AdminView: React.FC = () => {
                 <div className="flex gap-2">
                   <input 
                     type="text" value={field.url} onChange={(e) => field.set(e.target.value)}
-                    className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-4 py-3 text-xs outline-none focus:border-cyan-500/50 transition-colors"
+                    className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-4 py-3 text-xs outline-none focus:border-cyan-500/50 transition-colors font-mono text-cyan-300/70"
                   />
                   <input type="file" ref={field.ref} className="hidden" accept="video/*" onChange={(e) => handleFileUpload(e, field.type as any)} />
-                  <button onClick={() => field.ref.current?.click()} className="px-4 bg-slate-800 hover:bg-slate-700 rounded-lg text-[9px] font-orbitron border border-slate-700 transition-colors">
+                  <button onClick={() => field.ref.current?.click()} className="px-4 bg-slate-800 hover:bg-slate-700 rounded-lg text-[9px] font-orbitron border border-slate-700 transition-colors text-slate-300">
                     {field.prog > 0 ? `${field.prog}%` : 'FILE'}
                   </button>
                 </div>
@@ -154,7 +164,7 @@ const AdminView: React.FC = () => {
               disabled={isUpdating}
               className="px-10 py-4 bg-cyan-600 hover:bg-cyan-500 text-white font-orbitron font-bold rounded-lg transition-all disabled:opacity-50 text-xs tracking-widest shadow-lg shadow-cyan-900/20 active:scale-95"
             >
-              {isUpdating ? 'UPLOADING...' : 'PUSH TO ALL DEVICES'}
+              {isUpdating ? 'SYNCING ASSETS...' : 'PUSH TO ALL DEVICES'}
             </button>
           </div>
         </div>
