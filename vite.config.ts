@@ -6,5 +6,6 @@ export default defineConfig({
   plugins: [react()],
   server: {
     host: true // Cho phép truy cập qua LAN (cần thiết cho test trên iPad)
-  }
+  },
+  // Force update timestamp: 1.0.3
 })

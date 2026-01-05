@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>AI Young Guru - Launch Event</title>
+    <title>AI Young Guru - Orange Edition</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
     <style>
@@ -11,27 +11,30 @@
         margin: 0;
         padding: 0;
         background-color: #000510;
-        color: #e0f2fe;
+        color: #fff7ed; /* Orange-50 tint */
         font-family: 'Inter', sans-serif;
       }
       .font-orbitron { font-family: 'Orbitron', sans-serif; }
       
+      /* Orange Neon Pulse */
       @keyframes pulse-neon {
-        0%, 100% { box-shadow: 0 0 10px #00f2ff, 0 0 20px #00f2ff; opacity: 1; }
-        50% { box-shadow: 0 0 25px #00f2ff, 0 0 50px #00f2ff; opacity: 0.8; }
+        0%, 100% { box-shadow: 0 0 10px #f97316, 0 0 20px #f97316; opacity: 1; }
+        50% { box-shadow: 0 0 25px #f97316, 0 0 50px #f97316; opacity: 0.8; }
       }
       .animate-pulse-neon {
         animation: pulse-neon 2s infinite ease-in-out;
       }
       
+      /* Orange Grid Background */
       .bg-grid {
-        background-image: linear-gradient(to right, rgba(0, 242, 255, 0.05) 1px, transparent 1px),
-                          linear-gradient(to bottom, rgba(0, 242, 255, 0.05) 1px, transparent 1px);
+        background-image: linear-gradient(to right, rgba(249, 115, 22, 0.05) 1px, transparent 1px),
+                          linear-gradient(to bottom, rgba(249, 115, 22, 0.05) 1px, transparent 1px);
         background-size: 40px 40px;
       }
 
+      /* Orange Text Glow */
       .glow-text {
-        text-shadow: 0 0 10px rgba(0, 242, 255, 0.8), 0 0 20px rgba(0, 242, 255, 0.4);
+        text-shadow: 0 0 10px rgba(249, 115, 22, 0.8), 0 0 20px rgba(249, 115, 22, 0.4);
       }
     </style>
     <script type="importmap">

@@ -1,12 +1,13 @@
 {
   "name": "ai-young-guru-event",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.4",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "save": "git add . && git commit -m 'Auto save' && git push"
   },
   "dependencies": {
     "firebase": "^10.8.0",
