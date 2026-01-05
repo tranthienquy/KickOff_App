@@ -15,7 +15,7 @@ export interface AppState {
 
 export const INITIAL_STATE: AppState = {
   status: EventStatus.WAITING,
-  countdownUrl: 'https://assets.mixkit.co/videos/preview/mixkit-mechanical-digital-countdown-timer-2342-large.mp4', // Default placeholder
-  activatedUrl: 'https://assets.mixkit.co/videos/preview/mixkit-abstract-glowing-particles-background-vj-loop-4663-large.mp4', // Default placeholder
+  countdownUrl: 'https://assets.mixkit.co/videos/preview/mixkit-mechanical-digital-countdown-timer-2342-large.mp4',
+  activatedUrl: 'https://assets.mixkit.co/videos/preview/mixkit-abstract-glowing-particles-background-vj-loop-4663-large.mp4',
   timestamp: Date.now()
 };

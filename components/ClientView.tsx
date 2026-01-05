@@ -6,8 +6,6 @@ import { syncState } from '../services/firebase';
 const ClientView: React.FC = () => {
   const [state, setState] = useState<AppState | null>(null);
   const [unlocked, setUnlocked] = useState(false);
-  const [isInternalTransition, setIsInternalTransition] = useState(false);
-  
   const countdownVideoRef = useRef<HTMLVideoElement>(null);
   const activatedVideoRef = useRef<HTMLVideoElement>(null);
 
@@ -36,108 +34,85 @@ const ClientView: React.FC = () => {
   }, [state?.status, unlocked]);
 
   const handleUnlock = () => {
-    // Crucial for iOS/Safari: video.load() inside a user click event unlocks media policies
-    if (countdownVideoRef.current) {
-      countdownVideoRef.current.load();
-    }
-    if (activatedVideoRef.current) {
-      activatedVideoRef.current.load();
-    }
+    // Unlocking media for iOS
+    if (countdownVideoRef.current) countdownVideoRef.current.load();
+    if (activatedVideoRef.current) activatedVideoRef.current.load();
     setUnlocked(true);
-  };
-
-  const handleCountdownEnded = () => {
-    // Once countdown ends, we show the Pulse UI locally 
-    // Usually admin might trigger it, but local fallback is safer for sync
-    setIsInternalTransition(true);
   };
 
   if (!state) {
     return (
       <div className="h-screen w-screen flex items-center justify-center bg-[#000510]">
-        <div className="text-cyan-400 animate-pulse font-orbitron">INITIALIZING SYSTEM...</div>
+        <div className="text-cyan-400 animate-pulse font-orbitron tracking-widest">CONNECTING TO NODE...</div>
       </div>
     );
   }
 
   return (
-    <div className="h-screen w-screen relative overflow-hidden bg-[#000510] bg-grid">
+    <div className="h-screen w-screen relative overflow-hidden bg-[#000510] bg-grid selection:bg-none">
       
-      {/* Background UI Layer */}
-      <div className="absolute inset-0 z-0 opacity-20 pointer-events-none">
-        <div className="absolute top-10 left-10 w-32 h-32 border-l border-t border-cyan-500/50"></div>
-        <div className="absolute bottom-10 right-10 w-32 h-32 border-r border-b border-cyan-500/50"></div>
-      </div>
-
-      {/* 1. UNLOCK LAYER (iOS Mandatory) */}
+      {/* 1. START/UNLOCK SCREEN */}
       {!unlocked && (
-        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-[#000510] backdrop-blur-md">
-          <div className="text-center space-y-8 p-12 border border-cyan-900 bg-cyan-950/20 rounded-2xl glow-text">
-            <h1 className="text-4xl md:text-6xl font-orbitron font-bold text-[#00f2ff]">AI YOUNG GURU</h1>
-            <p className="text-cyan-200/60 font-orbitron tracking-widest text-sm">SECURE LINK ESTABLISHED</p>
+        <div className="absolute inset-0 z-[100] flex flex-col items-center justify-center bg-[#000510]">
+          <div className="absolute inset-0 opacity-20 pointer-events-none bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-cyan-500/20 via-transparent to-transparent"></div>
+          <div className="text-center space-y-12 z-10 px-6">
+            <h1 className="text-5xl md:text-8xl font-orbitron font-bold text-white glow-text tracking-tighter">
+              AI <span className="text-cyan-400">YOUNG</span> GURU
+            </h1>
+            <p className="text-cyan-500/60 font-orbitron tracking-[0.5em] text-sm md:text-xl">CONTEST LAUNCH SYSTEM</p>
             <button 
               onClick={handleUnlock}
-              className="px-12 py-6 bg-cyan-500 text-[#000510] font-orbitron font-bold text-xl rounded-full hover:bg-cyan-400 transition-all transform active:scale-95 shadow-lg shadow-cyan-500/50"
+              className="group relative px-16 py-8 bg-transparent overflow-hidden border-2 border-cyan-500 rounded-lg"
             >
-              SYNC & START
+              <div className="absolute inset-0 bg-cyan-500 transform translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
+              <span className="relative z-10 font-orbitron font-bold text-2xl text-cyan-400 group-hover:text-black transition-colors">START SYSTEM</span>
             </button>
           </div>
         </div>
       )}
 
       {/* 2. WAITING STATE */}
-      {unlocked && state.status === EventStatus.WAITING && (
-        <div className="h-full w-full flex flex-col items-center justify-center">
-          <div className="relative">
-             <div className="w-64 h-64 rounded-full border-4 border-cyan-900 flex items-center justify-center animate-spin-slow duration-[10s]">
-                <div className="w-56 h-56 rounded-full border-2 border-cyan-500/20 border-t-cyan-500 animate-spin"></div>
-             </div>
-             <div className="absolute inset-0 flex flex-col items-center justify-center">
-               <span className="text-cyan-500 font-orbitron text-xs tracking-tighter mb-2">NODE ACTIVE</span>
-               <span className="text-3xl font-orbitron font-bold text-white glow-text">READY</span>
-             </div>
-          </div>
-          <div className="mt-12 text-cyan-200/40 font-orbitron text-xs animate-pulse">
-            WAITING FOR COMMAND SIGNAL...
+      <div className={`h-full w-full flex flex-col items-center justify-center transition-opacity duration-1000 ${state.status === EventStatus.WAITING ? 'opacity-100' : 'opacity-0'}`}>
+        <div className="relative">
+          <div className="w-80 h-80 rounded-full border border-cyan-500/20 flex items-center justify-center">
+            <div className="w-72 h-72 rounded-full border-2 border-cyan-500/10 border-t-cyan-500 animate-spin duration-[3s]"></div>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+               <div className="text-cyan-500 font-orbitron text-xs mb-2 tracking-widest opacity-50 underline decoration-cyan-500/50 underline-offset-8">SYSTEM STATUS</div>
+               <div className="text-5xl font-orbitron font-bold text-white glow-text">READY</div>
+            </div>
           </div>
         </div>
-      )}
+      </div>
 
-      {/* 3. COUNTDOWN STATE */}
-      <div className={`absolute inset-0 transition-opacity duration-1000 ${state.status === EventStatus.COUNTDOWN ? 'opacity-100 z-10' : 'opacity-0 -z-10'}`}>
+      {/* 3. COUNTDOWN VIDEO */}
+      <div className={`absolute inset-0 transition-opacity duration-700 ${state.status === EventStatus.COUNTDOWN ? 'opacity-100 z-10' : 'opacity-0 -z-10'}`}>
         <video 
           ref={countdownVideoRef}
           src={state.countdownUrl}
           className="w-full h-full object-cover"
           playsInline
           webkit-playsinline="true"
-          muted // Auto-play often requires muted on iOS, but since we had a click, we could un-mute
-          onEnded={handleCountdownEnded}
+          muted // Required for some browsers to auto-play, even after interaction
         />
       </div>
 
-      {/* 4. TRIGGER READY STATE (Pulse UI) */}
-      {(state.status === EventStatus.TRIGGER_READY || (state.status === EventStatus.COUNTDOWN && isInternalTransition)) && (
-        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-[#000510]/80">
-          <div className="text-center space-y-12">
-            <div className="font-orbitron text-2xl text-cyan-400 tracking-widest glow-text">FINAL ACTIVATION</div>
-            <div 
-               className="w-64 h-64 md:w-96 md:h-96 rounded-full bg-cyan-500/20 border-4 border-cyan-500 flex items-center justify-center animate-pulse-neon cursor-pointer"
-               onClick={() => {/* Final touch logic if needed, usually Admin controls this */}}
-            >
-              <div className="w-48 h-48 md:w-72 md:h-72 rounded-full border-2 border-dashed border-cyan-500/40 animate-spin-slow"></div>
-              <div className="absolute font-orbitron text-4xl font-bold text-white tracking-widest text-center">
-                TOUCH TO<br/>ACTIVATE
+      {/* 4. TRIGGER READY (Pulsing Button) */}
+      {state.status === EventStatus.TRIGGER_READY && (
+        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-[#000510]/90 backdrop-blur-sm">
+          <div className="text-center">
+            <div className="font-orbitron text-cyan-400 text-2xl mb-16 tracking-[0.3em] glow-text">INITIATE FINAL LAUNCH</div>
+            <div className="relative w-80 h-80 md:w-96 md:h-96 mx-auto cursor-pointer flex items-center justify-center">
+              <div className="absolute inset-0 bg-cyan-500/20 rounded-full animate-ping"></div>
+              <div className="absolute inset-0 border-4 border-cyan-500 rounded-full animate-pulse-neon"></div>
+              <div className="z-10 text-white font-orbitron font-bold text-4xl tracking-tighter text-center">
+                TOUCH TO<br/><span className="text-cyan-400 uppercase text-5xl">ACTIVATE</span>
               </div>
-            </div>
-            <div className="text-cyan-500/40 font-orbitron animate-bounce">
-              WAITING FOR FINAL TRIGGER
             </div>
           </div>
         </div>
       )}
 
-      {/* 5. ACTIVATED STATE */}
+      {/* 5. ACTIVATED VIDEO */}
       <div className={`absolute inset-0 transition-opacity duration-1000 ${state.status === EventStatus.ACTIVATED ? 'opacity-100 z-30' : 'opacity-0 -z-10'}`}>
         <video 
           ref={activatedVideoRef}
@@ -147,8 +122,8 @@ const ClientView: React.FC = () => {
           webkit-playsinline="true"
         />
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className="p-8 border-4 border-white font-orbitron text-7xl font-bold text-white uppercase tracking-tighter glow-text bg-black/30 backdrop-blur-sm">
-            LAUNCHED
+          <div className="px-12 py-6 border-y-4 border-cyan-400 bg-black/40 backdrop-blur-md">
+            <h2 className="text-7xl md:text-9xl font-orbitron font-bold text-white glow-text tracking-tighter">LAUNCHED</h2>
           </div>
         </div>
       </div>

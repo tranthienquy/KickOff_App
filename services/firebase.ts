@@ -1,52 +1,91 @@
 
 import { initializeApp } from 'firebase/app';
-import { getDatabase, ref, onValue, set, update } from 'firebase/database';
-import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { getDatabase, ref, onValue, set, update, Database } from 'firebase/database';
 import { AppState, INITIAL_STATE } from '../types';
 
-// NOTE: Replace these with your actual Firebase project config from the Firebase Console
+// ==========================================================
+// Cấu hình Firebase - Đã cập nhật với Key thực tế của bạn
+// ==========================================================
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "your-project-id.firebaseapp.com",
-  databaseURL: "https://your-project-id-default-rtdb.firebaseio.com",
-  projectId: "your-project-id",
-  storageBucket: "your-project-id.appspot.com",
-  messagingSenderId: "your-sender-id",
-  appId: "your-app-id"
+  apiKey: "AIzaSyCLMKqjAdZQYtmNloq05uQpqMAIKQYgo1Y",
+  authDomain: "ai-young-guru-55339.firebaseapp.com",
+  databaseURL: "https://ai-young-guru-55339-default-rtdb.firebaseio.com",
+  projectId: "ai-young-guru-55339",
+  storageBucket: "ai-young-guru-55339.firebasestorage.app",
+  messagingSenderId: "441913380578",
+  appId: "1:441913380578:web:bfacc21705c626c5ff58bb",
+  measurementId: "G-KW4NTD3Z2Z"
 };
 
-const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
-const storage = getStorage(app);
-const stateRef = ref(db, 'eventState');
+// Kiểm tra xem đã cấu hình Key chưa (Dựa trên giá trị mặc định ban đầu)
+const isConfigValid = firebaseConfig.apiKey !== "YOUR_API_KEY" && firebaseConfig.apiKey !== "";
+
+let db: Database | null = null;
+if (isConfigValid) {
+  try {
+    const app = initializeApp(firebaseConfig);
+    db = getDatabase(app);
+    console.log("Firebase initialized successfully with real credentials.");
+  } catch (error) {
+    console.error("Firebase Init Error:", error);
+  }
+}
+
+const stateRef = db ? ref(db, 'eventState') : null;
+
+// Local state cho chế độ Demo khi chưa có Firebase hoặc lỗi kết nối
+let localState = { ...INITIAL_STATE };
+let localListeners: ((state: AppState) => void)[] = [];
 
 export const syncState = (callback: (state: AppState) => void) => {
-  return onValue(stateRef, (snapshot) => {
-    const data = snapshot.val();
-    if (data) {
-      callback(data);
-    } else {
-      // Initialize if empty
-      set(stateRef, INITIAL_STATE);
-      callback(INITIAL_STATE);
-    }
-  });
+  if (stateRef) {
+    return onValue(stateRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        callback(data);
+      } else {
+        // Khởi tạo state mặc định nếu Database trống
+        set(stateRef, INITIAL_STATE);
+        callback(INITIAL_STATE);
+      }
+    }, (error) => {
+      console.error("Firebase Read Error:", error);
+      // Fallback to local if error occurs
+      callback(localState);
+    });
+  } else {
+    // Chế độ Demo Offline
+    setTimeout(() => callback(localState), 0);
+    localListeners.push(callback);
+    return () => { localListeners = localListeners.filter(l => l !== callback); };
+  }
 };
 
 export const updateStatus = (status: AppState['status']) => {
-  return update(stateRef, { status, timestamp: Date.now() });
+  if (stateRef) {
+    return update(stateRef, { status, timestamp: Date.now() });
+  } else {
+    localState = { ...localState, status, timestamp: Date.now() };
+    localListeners.forEach(l => l(localState));
+  }
 };
 
 export const updateUrls = (countdownUrl: string, activatedUrl: string) => {
-  return update(stateRef, { countdownUrl, activatedUrl, timestamp: Date.now() });
+  if (stateRef) {
+    return update(stateRef, { countdownUrl, activatedUrl, timestamp: Date.now() });
+  } else {
+    localState = { ...localState, countdownUrl, activatedUrl, timestamp: Date.now() };
+    localListeners.forEach(l => l(localState));
+  }
 };
 
 export const resetSystem = () => {
-  return set(stateRef, INITIAL_STATE);
+  if (stateRef) {
+    return set(stateRef, INITIAL_STATE);
+  } else {
+    localState = { ...INITIAL_STATE };
+    localListeners.forEach(l => l(localState));
+  }
 };
 
-export const uploadVideo = async (file: File, path: string): Promise<string> => {
-  const fileRef = storageRef(storage, `videos/${path}_${Date.now()}_${file.name}`);
-  await uploadBytes(fileRef, file);
-  return await getDownloadURL(fileRef);
-};
+export const isFirebaseConnected = () => isConfigValid;
