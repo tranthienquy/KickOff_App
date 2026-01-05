@@ -1,7 +1,6 @@
-
 export enum EventStatus {
   WAITING = 'waiting',
-  COUNTDOWN = 'countdown', // Sẽ được hiển thị là "CLIP CHỜ"
+  COUNTDOWN = 'countdown',
   ACTIVATED = 'activated'
 }
 
@@ -10,13 +9,29 @@ export interface AppState {
   waitingUrl: string;
   countdownUrl: string;
   activatedUrl: string;
+  splashVideoUrl: string;
+  buttonText: string;
   timestamp: number;
+  titlePrefix: string;
+  titleHighlight: string;
+  titleSuffix: string;
+  readyText: string;
+  scrollingText: string;
 }
 
 export const INITIAL_STATE: AppState = {
   status: EventStatus.WAITING,
-  waitingUrl: 'https://www.youtube.com/watch?v=mE9N68Vn_hM', // Mặc định dùng clip chờ làm nền
-  countdownUrl: 'https://www.youtube.com/watch?v=mE9N68Vn_hM', 
-  activatedUrl: 'https://www.youtube.com/watch?v=3S1NIn6-L_w',
-  timestamp: Date.now()
+  // Video mẫu tạm thời (Google Sample Videos) để test giao diện
+  waitingUrl: 'https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4', 
+  countdownUrl: 'https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4', 
+  activatedUrl: 'https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+  splashVideoUrl: 'https://storage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
+  
+  buttonText: 'INITIALIZE SYNC-STREAM',
+  timestamp: Date.now(),
+  titlePrefix: 'AI',
+  titleHighlight: 'YOUNG',
+  titleSuffix: 'GURU',
+  readyText: 'READY',
+  scrollingText: 'WELCOME TO THE AI YOUNG GURU LAUNCH EVENT • PLEASE TAKE YOUR SEATS • EVENT STARTING SOON'
 };

@@ -1,20 +1,15 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# AI Young Guru - Event Sync System
 
-# Run and deploy your AI Studio app
+Hệ thống điều khiển sự kiện đồng bộ thời gian thực sử dụng Firebase Realtime Database.
 
-This contains everything you need to run your app locally.
+## Tính năng
+- **Client View (iPad/Màn hình LED):** Hiển thị video đồng bộ, splash screen, và hiệu ứng chữ chạy.
+- **Admin View (Laptop):** Điều khiển trạng thái (Waiting, Countdown, Activated), upload video, và thay đổi nội dung chữ theo thời gian thực.
 
-View your app in AI Studio: https://ai.studio/apps/drive/14R5r5byXIQCFkFXl99TBCAuQrD4-jZEh
+## Cài đặt
+1. `npm install`
+2. `npm run dev`
 
-## Run Locally
-
-**Prerequisites:**  Node.js
-
-
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## Cấu trúc
+- `/` -> Giao diện hiển thị (Client)
+- `/admin` -> Giao diện điều khiển (Admin)
