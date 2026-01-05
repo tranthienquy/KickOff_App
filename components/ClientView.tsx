@@ -7,6 +7,7 @@ const ClientView: React.FC = () => {
   const [state, setState] = useState<AppState | null>(null);
   const [unlocked, setUnlocked] = useState(false);
   const [isMediaLoading, setIsMediaLoading] = useState(false);
+  const [isBuffering, setIsBuffering] = useState(false);
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const prevStateRef = useRef<AppState | null>(null);
@@ -14,7 +15,6 @@ const ClientView: React.FC = () => {
   
   // 1. Đồng bộ trạng thái và Theo dõi thiết bị
   useEffect(() => {
-    // Đánh dấu thiết bị này đang kết nối
     trackDevice();
 
     const unsubscribe = syncState((newState) => {
@@ -26,6 +26,7 @@ const ClientView: React.FC = () => {
         (newState.status === EventStatus.ACTIVATED && newState.activatedUrl !== prev.activatedUrl)
       );
 
+      // Nếu có sự thay đổi quan trọng, kích hoạt loading overlay
       if ((statusChanged || urlChanged || newState.timestamp !== prev?.timestamp) && newState.status !== EventStatus.WAITING) {
         setIsMediaLoading(true);
         if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
@@ -44,17 +45,15 @@ const ClientView: React.FC = () => {
     };
   }, []);
 
-  // 2. Logic phát video
+  // 2. Logic phát video (Khởi tạo lần đầu hoặc khi đổi trạng thái)
   useEffect(() => {
     if (unlocked && state && state.status !== EventStatus.WAITING) {
       const isMuted = state.status === EventStatus.COUNTDOWN;
       const url = isMuted ? state.countdownUrl : state.activatedUrl;
       const media = getMediaSource(url, isMuted);
 
-      const currentServerTime = getServerTime();
-      const elapsedSeconds = Math.max(0, (currentServerTime - state.timestamp) / 1000);
-
       if (media.type === 'native' && videoRef.current) {
+        // Chỉ reload SRC nếu thực sự thay đổi để tránh đứng hình
         if (videoRef.current.src !== media.src) {
           videoRef.current.src = media.src;
           videoRef.current.load();
@@ -62,34 +61,53 @@ const ClientView: React.FC = () => {
         
         videoRef.current.muted = isMuted;
         videoRef.current.loop = isMuted;
+
+        const currentServerTime = getServerTime();
+        const elapsedSeconds = Math.max(0, (currentServerTime - state.timestamp) / 1000);
+        
+        // Chỉ gán currentTime khi video đã sẵn sàng hoặc bắt đầu chuyển trạng thái
         videoRef.current.currentTime = elapsedSeconds;
         
         const playPromise = videoRef.current.play();
         if (playPromise !== undefined) {
           playPromise.catch(() => {
-            setTimeout(() => videoRef.current?.play(), 100);
+            // Tự động thử lại nếu trình duyệt chặn autoplay
+            setTimeout(() => videoRef.current?.play(), 200);
           });
         }
       }
     }
   }, [state?.status, state?.timestamp, state?.countdownUrl, state?.activatedUrl, unlocked]);
 
+  // 3. Periodic Drift Check (Đồng bộ ngầm - Giảm độ nhạy để mượt hơn)
   useEffect(() => {
     const driftCheck = setInterval(() => {
-      if (unlocked && state && state.status !== EventStatus.WAITING && videoRef.current && !videoRef.current.paused) {
+      if (
+        unlocked && 
+        state && 
+        state.status !== EventStatus.WAITING && 
+        videoRef.current && 
+        !videoRef.current.paused &&
+        !isBuffering // Không sync khi đang buffer để tránh giật
+      ) {
         const currentServerTime = getServerTime();
         const expectedTime = (currentServerTime - state.timestamp) / 1000;
         const actualTime = videoRef.current.currentTime;
-        if (Math.abs(expectedTime - actualTime) > 0.3) {
+        
+        // Tăng ngưỡng lên 1.2 giây để tránh giật hình do micro-stutters
+        // Chỉ nhảy thời gian nếu lệch quá xa
+        if (Math.abs(expectedTime - actualTime) > 1.2) {
+          console.log(`[Sync] Resyncing due to drift: ${Math.abs(expectedTime - actualTime).toFixed(2)}s`);
           videoRef.current.currentTime = expectedTime;
         }
       }
-    }, 2000);
+    }, 3000); // Kiểm tra mỗi 3 giây thay vì 2 giây để giảm tải cho CPU
     return () => clearInterval(driftCheck);
-  }, [state, unlocked]);
+  }, [state, unlocked, isBuffering]);
 
   const handleUnlock = () => {
     setUnlocked(true);
+    // Kích hoạt audio context
     if (videoRef.current) {
       videoRef.current.play().then(() => videoRef.current?.pause()).catch(() => {});
     }
@@ -101,6 +119,7 @@ const ClientView: React.FC = () => {
       loadingTimeoutRef.current = null;
     }
     setIsMediaLoading(false);
+    setIsBuffering(false);
   };
 
   const getMediaSource = (url: string, isMuted: boolean = true) => {
@@ -140,6 +159,7 @@ const ClientView: React.FC = () => {
           preload="auto"
           onPlaying={handleMediaReady}
           onCanPlay={handleMediaReady}
+          onWaiting={() => setIsBuffering(true)}
           onLoadedMetadata={() => {
              if(videoRef.current && state) {
                const accurateElapsed = Math.max(0, (getServerTime() - state.timestamp) / 1000);
@@ -150,7 +170,8 @@ const ClientView: React.FC = () => {
 
         {currentMedia.type === 'youtube' && showMedia && (
           <iframe 
-            key={`${currentMedia.src}_${state.timestamp}`}
+            // Key chỉ thay đổi khi Status hoặc URL thay đổi để tránh reload vô ích
+            key={`${state.status}_${currentUrl}`}
             src={currentMedia.src}
             className="w-full h-full pointer-events-none scale-[1.35] md:scale-[1.1]"
             frameBorder="0"
@@ -160,10 +181,13 @@ const ClientView: React.FC = () => {
         )}
       </div>
 
-      {unlocked && isMediaLoading && (
-        <div className="absolute inset-0 z-[150] flex flex-col items-center justify-center bg-[#000510] transition-opacity duration-150">
-          <div className="w-40 h-[1px] bg-cyan-500/10 overflow-hidden">
-             <div className="h-full bg-cyan-400 animate-[loading_0.5s_infinite_linear]"></div>
+      {unlocked && (isMediaLoading || isBuffering) && (
+        <div className="absolute inset-0 z-[150] flex flex-col items-center justify-center bg-[#000510]/50 backdrop-blur-sm transition-opacity duration-150">
+          <div className="w-40 h-[1px] bg-cyan-500/10 overflow-hidden relative">
+             <div className="absolute inset-0 bg-cyan-400 animate-[loading_1.5s_infinite_ease-in-out]"></div>
+          </div>
+          <div className="mt-4 text-[8px] font-orbitron text-cyan-500/50 tracking-[0.3em] uppercase">
+            {isBuffering ? 'Buffering' : 'Syncing'}
           </div>
         </div>
       )}
@@ -194,6 +218,7 @@ const ClientView: React.FC = () => {
       <style>{`
         @keyframes loading {
           0% { transform: translateX(-100%); }
+          50% { transform: translateX(0); }
           100% { transform: translateX(100%); }
         }
         .bg-grid {
