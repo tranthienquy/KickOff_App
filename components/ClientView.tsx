@@ -13,26 +13,25 @@ const ClientView: React.FC = () => {
   const prevStateRef = useRef<AppState | null>(null);
   const loadingTimeoutRef = useRef<any>(null);
   
-  // 1. Theo dõi trạng thái từ Firebase
+  // 1. Đồng bộ trạng thái từ Firebase
   useEffect(() => {
     const unsubscribe = syncState((newState) => {
       const prev = prevStateRef.current;
       
-      const hasChanged = !prev || 
-        newState.status !== prev.status || 
-        newState.timestamp !== prev.timestamp ||
-        newState.countdownUrl !== prev.countdownUrl || 
-        newState.activatedUrl !== prev.activatedUrl;
+      // Chỉ kích hoạt màn hình loading khi Status thực sự thay đổi sang trạng thái phát clip
+      const statusChanged = !prev || newState.status !== prev.status;
+      const urlChanged = prev && (
+        (newState.status === EventStatus.COUNTDOWN && newState.countdownUrl !== prev.countdownUrl) ||
+        (newState.status === EventStatus.ACTIVATED && newState.activatedUrl !== prev.activatedUrl)
+      );
 
-      if (hasChanged && newState.status !== EventStatus.WAITING) {
-        // Bật loading ngay lập tức khi có sự thay đổi
+      if ((statusChanged || urlChanged) && newState.status !== EventStatus.WAITING) {
         setIsMediaLoading(true);
-        
-        // Timeout dự phòng (fallback) rút ngắn xuống còn 2s thay vì 4s
+        // Timeout fallback cực ngắn để đảm bảo không bị kẹt màn hình loading
         if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
         loadingTimeoutRef.current = setTimeout(() => {
           setIsMediaLoading(false);
-        }, 2000);
+        }, 1500);
       }
 
       prevStateRef.current = newState;
@@ -45,17 +44,18 @@ const ClientView: React.FC = () => {
     };
   }, []);
 
-  // 2. Logic đồng bộ hóa video (Syncing)
+  // 2. Tối ưu hóa việc phát và đồng bộ Video
   useEffect(() => {
     if (unlocked && state && state.status !== EventStatus.WAITING) {
       const isMuted = state.status === EventStatus.COUNTDOWN;
       const url = isMuted ? state.countdownUrl : state.activatedUrl;
       const media = getMediaSource(url, isMuted);
 
+      // Tính toán vị trí phát dựa trên thời điểm Admin bấm nút
       const elapsedSeconds = Math.max(0, (Date.now() - state.timestamp) / 1000);
 
       if (media.type === 'native' && videoRef.current) {
-        // Tối ưu: Chỉ reload nếu SRC thay đổi để tránh giật hình khi sync timestamp
+        // Chỉ gọi load() nếu URL thay đổi để giữ buffer cũ nếu cùng 1 file
         if (videoRef.current.src !== media.src) {
           videoRef.current.src = media.src;
           videoRef.current.load();
@@ -63,19 +63,18 @@ const ClientView: React.FC = () => {
         
         videoRef.current.muted = isMuted;
         videoRef.current.loop = isMuted;
-        videoRef.current.currentTime = elapsedSeconds;
         
+        // Nhảy đến vị trí chính xác ngay lập tức
+        if (Math.abs(videoRef.current.currentTime - elapsedSeconds) > 0.5) {
+          videoRef.current.currentTime = elapsedSeconds;
+        }
+        
+        // Ép phát video nhanh nhất có thể
         const playPromise = videoRef.current.play();
         if (playPromise !== undefined) {
-          playPromise.catch(error => {
-            console.warn("Autoplay deferred:", error);
-            setTimeout(() => {
-              if (videoRef.current) {
-                const retryElapsed = Math.max(0, (Date.now() - state.timestamp) / 1000);
-                videoRef.current.currentTime = retryElapsed;
-                videoRef.current.play();
-              }
-            }, 500);
+          playPromise.catch(() => {
+            // Tự động thử lại nếu trình duyệt chặn ban đầu
+            setTimeout(() => videoRef.current?.play(), 100);
           });
         }
       }
@@ -84,20 +83,18 @@ const ClientView: React.FC = () => {
 
   const handleUnlock = () => {
     setUnlocked(true);
-    // Priming audio context ngay lập tức
+    // Kích hoạt Audio Context cho iOS/iPadOS
     if (videoRef.current) {
-      videoRef.current.play().then(() => {
-        videoRef.current?.pause();
-      }).catch(() => {});
+      videoRef.current.play().then(() => videoRef.current?.pause()).catch(() => {});
     }
   };
 
   const handleMediaReady = () => {
-    // Xóa ngay màn hình loading khi video thực sự phát (playing) hoặc đã sẵn sàng
     if (loadingTimeoutRef.current) {
       clearTimeout(loadingTimeoutRef.current);
       loadingTimeoutRef.current = null;
     }
+    // Tắt loading ngay khi video bắt đầu chuyển động
     setIsMediaLoading(false);
   };
 
@@ -118,7 +115,7 @@ const ClientView: React.FC = () => {
 
   if (!state) return (
     <div className="h-screen w-screen flex items-center justify-center bg-[#000510]">
-      <div className="text-cyan-400 animate-pulse font-orbitron tracking-widest text-[10px]">SYNCING WITH CLOUD...</div>
+      <div className="text-cyan-400 animate-pulse font-orbitron tracking-widest text-[10px]">FAST-SYNC ACTIVE...</div>
     </div>
   );
 
@@ -128,19 +125,19 @@ const ClientView: React.FC = () => {
   const showMedia = unlocked && state.status !== EventStatus.WAITING;
 
   return (
-    <div className="h-screen w-screen relative overflow-hidden bg-[#000510] bg-grid selection:bg-none">
+    <div className="h-screen w-screen relative overflow-hidden bg-[#000510] bg-grid selection:none">
       
-      <div className={`absolute inset-0 z-10 bg-black transition-opacity duration-500 ${showMedia ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
-        {/* NATIVE VIDEO PLAYER - Thêm preload="auto" để buffer nhanh nhất */}
+      {/* Container Video với transition cực nhanh (200ms) */}
+      <div className={`absolute inset-0 z-10 bg-black transition-opacity duration-200 ${showMedia ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
         <video 
           ref={videoRef}
           className={`w-full h-full object-cover ${currentMedia.type === 'native' ? 'block' : 'hidden'}`}
           playsInline 
+          autoPlay
           preload="auto"
           onPlaying={handleMediaReady}
           onCanPlay={handleMediaReady}
           onLoadedMetadata={() => {
-             // Đồng bộ lại time ngay khi metadata sẵn sàng để tránh "nhảy" hình
              if(videoRef.current && state) {
                const accurateElapsed = Math.max(0, (Date.now() - state.timestamp) / 1000);
                videoRef.current.currentTime = accurateElapsed;
@@ -148,7 +145,6 @@ const ClientView: React.FC = () => {
           }}
         />
 
-        {/* YOUTUBE PLAYER */}
         {currentMedia.type === 'youtube' && showMedia && (
           <iframe 
             ref={iframeRef}
@@ -160,52 +156,38 @@ const ClientView: React.FC = () => {
             onLoad={handleMediaReady}
           />
         )}
-        
-        {state.status === EventStatus.COUNTDOWN && (
-          <div className="absolute bottom-8 left-8 z-50 px-3 py-1 border border-cyan-500/10 bg-black/40 backdrop-blur-sm rounded">
-             <div className="text-[8px] font-orbitron text-cyan-400/60 tracking-[0.2em] uppercase">
-               Sync Stream Active
-             </div>
-          </div>
-        )}
       </div>
 
-      {/* Tối ưu Overlay Loading - mỏng nhẹ và biến mất nhanh hơn */}
+      {/* Loading Overlay siêu mỏng, biến mất ngay khi có frame đầu tiên */}
       {unlocked && isMediaLoading && (
-        <div className="absolute inset-0 z-[150] flex flex-col items-center justify-center bg-[#000510]/80 backdrop-blur-sm transition-opacity duration-300">
-          <div className="w-32 h-[2px] bg-slate-900 rounded-full overflow-hidden border border-cyan-500/10">
-             <div className="h-full bg-cyan-400 animate-[loading_0.8s_infinite_linear]"></div>
+        <div className="absolute inset-0 z-[150] flex flex-col items-center justify-center bg-[#000510] transition-opacity duration-150">
+          <div className="w-40 h-[1px] bg-cyan-500/10 overflow-hidden">
+             <div className="h-full bg-cyan-400 animate-[loading_0.5s_infinite_linear]"></div>
           </div>
         </div>
       )}
 
       {!unlocked && (
         <div className="absolute inset-0 z-[200] flex flex-col items-center justify-center bg-[#000510]">
-          <div className="absolute inset-0 opacity-10 pointer-events-none bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-cyan-500/30 via-transparent to-transparent"></div>
           <div className="text-center space-y-12 z-10 px-6">
             <h1 className="text-5xl md:text-8xl font-orbitron font-bold text-white glow-text tracking-tighter">
               AI <span className="text-cyan-400">YOUNG</span> GURU
             </h1>
-            <p className="text-cyan-500/40 font-orbitron tracking-[0.4em] text-[9px] md:text-xs uppercase">High Speed Node v2.8</p>
             <button 
               onClick={handleUnlock}
-              className="group relative px-10 py-5 bg-transparent overflow-hidden border border-cyan-500/30 rounded-lg hover:border-cyan-400 transition-all"
+              className="px-10 py-5 bg-cyan-500/5 border border-cyan-500/30 rounded-lg text-cyan-400 font-orbitron font-bold text-sm tracking-widest hover:bg-cyan-500/20 transition-all active:scale-95"
             >
-              <div className="absolute inset-0 bg-cyan-500/5 transform translate-y-full group-hover:translate-y-0 transition-transform duration-200"></div>
-              <span className="relative z-10 font-orbitron font-bold text-sm text-cyan-400 tracking-[0.2em]">INIT SYSTEM</span>
+              INITIALIZE STREAM
             </button>
           </div>
         </div>
       )}
 
-      <div className={`h-full w-full flex flex-col items-center justify-center transition-all duration-700 ${state.status === EventStatus.WAITING ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
-        <div className="relative">
-          <div className="w-48 h-48 md:w-64 md:h-64 rounded-full border border-cyan-500/5 flex items-center justify-center">
-            <div className="absolute inset-0 rounded-full border-t border-cyan-500/20 animate-spin duration-[4s]"></div>
-            <div className="flex flex-col items-center justify-center text-center">
-               <div className="text-3xl font-orbitron font-bold text-white/80 glow-text uppercase tracking-widest">Standby</div>
-            </div>
-          </div>
+      {/* Màn hình Standby (Waiting) */}
+      <div className={`h-full w-full flex flex-col items-center justify-center transition-all duration-300 ${state.status === EventStatus.WAITING ? 'opacity-100 scale-100' : 'opacity-0 scale-110 pointer-events-none'}`}>
+        <div className="w-32 h-32 md:w-48 md:h-48 rounded-full border border-cyan-500/10 flex items-center justify-center relative">
+          <div className="absolute inset-0 rounded-full border-t border-cyan-500/30 animate-spin"></div>
+          <div className="text-xl font-orbitron font-bold text-white/40 tracking-widest">READY</div>
         </div>
       </div>
 
@@ -217,7 +199,7 @@ const ClientView: React.FC = () => {
         .bg-grid {
           background-image: linear-gradient(to right, rgba(0, 242, 255, 0.01) 1px, transparent 1px),
                             linear-gradient(to bottom, rgba(0, 242, 255, 0.01) 1px, transparent 1px);
-          background-size: 60px 60px;
+          background-size: 80px 80px;
         }
       `}</style>
     </div>
