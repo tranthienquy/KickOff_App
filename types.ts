@@ -1,8 +1,7 @@
 
 export enum EventStatus {
   WAITING = 'waiting',
-  COUNTDOWN = 'countdown',
-  TRIGGER_READY = 'trigger_ready',
+  COUNTDOWN = 'countdown', // Sẽ được hiển thị là "CLIP CHỜ"
   ACTIVATED = 'activated'
 }
 
@@ -15,7 +14,7 @@ export interface AppState {
 
 export const INITIAL_STATE: AppState = {
   status: EventStatus.WAITING,
-  countdownUrl: 'https://assets.mixkit.co/videos/preview/mixkit-mechanical-digital-countdown-timer-2342-large.mp4',
-  activatedUrl: 'https://assets.mixkit.co/videos/preview/mixkit-abstract-glowing-particles-background-vj-loop-4663-large.mp4',
+  countdownUrl: 'https://www.youtube.com/watch?v=mE9N68Vn_hM', 
+  activatedUrl: 'https://www.youtube.com/watch?v=3S1NIn6-L_w',
   timestamp: Date.now()
 };

@@ -6,52 +6,100 @@ import { syncState } from '../services/firebase';
 const ClientView: React.FC = () => {
   const [state, setState] = useState<AppState | null>(null);
   const [unlocked, setUnlocked] = useState(false);
-  const countdownVideoRef = useRef<HTMLVideoElement>(null);
-  const activatedVideoRef = useRef<HTMLVideoElement>(null);
-
+  const [isMediaLoading, setIsMediaLoading] = useState(false);
+  
+  const videoRef = useRef<HTMLVideoElement>(null);
+  // Fix: Use ReturnType<typeof setTimeout> instead of NodeJS.Timeout to avoid namespace errors in browser environment
+  const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  
   useEffect(() => {
     const unsubscribe = syncState((newState) => {
-      setState(newState);
+      setState(prev => {
+        // Chỉ hiện loading nếu Status thay đổi sang một trạng thái media hoặc URL thay đổi
+        if (prev && (newState.status !== prev.status || newState.countdownUrl !== prev.countdownUrl || newState.activatedUrl !== prev.activatedUrl)) {
+          if (newState.status !== EventStatus.WAITING) {
+            setIsMediaLoading(true);
+            // Tự động tắt loading sau 3 giây nếu sự kiện media không kích hoạt (tránh kẹt)
+            if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
+            loadingTimeoutRef.current = setTimeout(() => {
+              setIsMediaLoading(false);
+            }, 3000);
+          }
+        }
+        return newState;
+      });
     });
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
+    };
   }, []);
 
-  // Sync Video playback with status changes
   useEffect(() => {
-    if (!state || !unlocked) return;
-
-    if (state.status === EventStatus.COUNTDOWN) {
-      if (countdownVideoRef.current) {
-        countdownVideoRef.current.currentTime = 0;
-        countdownVideoRef.current.play().catch(console.error);
-      }
-    } else if (state.status === EventStatus.ACTIVATED) {
-      if (activatedVideoRef.current) {
-        activatedVideoRef.current.currentTime = 0;
-        activatedVideoRef.current.play().catch(console.error);
+    if (unlocked && videoRef.current && state && state.status !== EventStatus.WAITING) {
+      videoRef.current.load();
+      const playPromise = videoRef.current.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(error => {
+          console.log("Autoplay blocked, retrying...", error);
+          setTimeout(() => videoRef.current?.play(), 500);
+        });
       }
     }
-  }, [state?.status, unlocked]);
+  }, [state?.status, state?.countdownUrl, state?.activatedUrl, unlocked]);
 
   const handleUnlock = () => {
-    // Unlocking media for iOS
-    if (countdownVideoRef.current) countdownVideoRef.current.load();
-    if (activatedVideoRef.current) activatedVideoRef.current.load();
     setUnlocked(true);
+    // Kích hoạt engine media trên mobile
+    if (videoRef.current) {
+      videoRef.current.play().then(() => {
+        videoRef.current?.pause();
+      }).catch(() => {});
+    }
   };
 
-  if (!state) {
-    return (
-      <div className="h-screen w-screen flex items-center justify-center bg-[#000510]">
-        <div className="text-cyan-400 animate-pulse font-orbitron tracking-widest">CONNECTING TO NODE...</div>
-      </div>
-    );
-  }
+  const handleMediaReady = () => {
+    if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
+    setIsMediaLoading(false);
+  };
+
+  const getMediaSource = (url: string, isMuted: boolean = true) => {
+    const youtubeRegex = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+    const match = url.match(youtubeRegex);
+    
+    if (match && match[2].length === 11) {
+      const videoId = match[2];
+      return {
+        type: 'youtube',
+        src: `https://www.youtube.com/embed/${videoId}?autoplay=1&controls=0&mute=${isMuted ? 1 : 0}&loop=1&playlist=${videoId}&rel=0&showinfo=0&iv_load_policy=3&modestbranding=1&playsinline=1&enablejsapi=1`
+      };
+    }
+    return { type: 'native', src: url };
+  };
+
+  if (!state) return (
+    <div className="h-screen w-screen flex items-center justify-center bg-[#000510]">
+      <div className="text-cyan-400 animate-pulse font-orbitron tracking-widest">CONNECTING NODE...</div>
+    </div>
+  );
 
   return (
     <div className="h-screen w-screen relative overflow-hidden bg-[#000510] bg-grid selection:bg-none">
       
-      {/* 1. START/UNLOCK SCREEN */}
+      {/* Prime Media Hook */}
+      <video ref={videoRef} className="hidden" playsInline muted />
+
+      {/* Loading Overlay */}
+      {unlocked && isMediaLoading && (
+        <div className="absolute inset-0 z-[150] flex flex-col items-center justify-center bg-[#000510]/80 backdrop-blur-sm">
+          <div className="w-48 h-1 bg-slate-900 rounded-full overflow-hidden border border-cyan-500/20">
+             <div className="h-full bg-cyan-500 animate-[loading_1.5s_infinite_ease-in-out]"></div>
+          </div>
+          <div className="mt-4 text-[9px] font-orbitron text-cyan-500 tracking-[0.3em] animate-pulse">BUFFERING MEDIA...</div>
+        </div>
+      )}
+
+      {/* Entry Screen */}
       {!unlocked && (
         <div className="absolute inset-0 z-[100] flex flex-col items-center justify-center bg-[#000510]">
           <div className="absolute inset-0 opacity-20 pointer-events-none bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-cyan-500/20 via-transparent to-transparent"></div>
@@ -59,75 +107,90 @@ const ClientView: React.FC = () => {
             <h1 className="text-5xl md:text-8xl font-orbitron font-bold text-white glow-text tracking-tighter">
               AI <span className="text-cyan-400">YOUNG</span> GURU
             </h1>
-            <p className="text-cyan-500/60 font-orbitron tracking-[0.5em] text-sm md:text-xl">CONTEST LAUNCH SYSTEM</p>
+            <p className="text-cyan-500/60 font-orbitron tracking-[0.5em] text-sm md:text-xl uppercase">Contest Launch Console</p>
             <button 
               onClick={handleUnlock}
               className="group relative px-16 py-8 bg-transparent overflow-hidden border-2 border-cyan-500 rounded-lg"
             >
               <div className="absolute inset-0 bg-cyan-500 transform translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
-              <span className="relative z-10 font-orbitron font-bold text-2xl text-cyan-400 group-hover:text-black transition-colors">START SYSTEM</span>
+              <span className="relative z-10 font-orbitron font-bold text-2xl text-cyan-400 group-hover:text-black transition-colors uppercase tracking-widest">START CONSOLE</span>
             </button>
           </div>
         </div>
       )}
 
-      {/* 2. WAITING STATE */}
-      <div className={`h-full w-full flex flex-col items-center justify-center transition-opacity duration-1000 ${state.status === EventStatus.WAITING ? 'opacity-100' : 'opacity-0'}`}>
+      {/* Standby State (Waiting) */}
+      <div className={`h-full w-full flex flex-col items-center justify-center transition-opacity duration-1000 ${state.status === EventStatus.WAITING ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
         <div className="relative">
           <div className="w-80 h-80 rounded-full border border-cyan-500/20 flex items-center justify-center">
-            <div className="w-72 h-72 rounded-full border-2 border-cyan-500/10 border-t-cyan-500 animate-spin duration-[3s]"></div>
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-               <div className="text-cyan-500 font-orbitron text-xs mb-2 tracking-widest opacity-50 underline decoration-cyan-500/50 underline-offset-8">SYSTEM STATUS</div>
-               <div className="text-5xl font-orbitron font-bold text-white glow-text">READY</div>
+            <div className="w-72 h-72 rounded-full border-2 border-cyan-500/10 border-t-cyan-500 animate-spin duration-[4s]"></div>
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-4">
+               <div className="text-cyan-500 font-orbitron text-[10px] mb-2 tracking-[0.3em] opacity-50 uppercase">Ready For Sync</div>
+               <div className="text-4xl font-orbitron font-bold text-white glow-text uppercase">Standby</div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* 3. COUNTDOWN VIDEO */}
-      <div className={`absolute inset-0 transition-opacity duration-700 ${state.status === EventStatus.COUNTDOWN ? 'opacity-100 z-10' : 'opacity-0 -z-10'}`}>
-        <video 
-          ref={countdownVideoRef}
-          src={state.countdownUrl}
-          className="w-full h-full object-cover"
-          playsInline
-          webkit-playsinline="true"
-          muted // Required for some browsers to auto-play, even after interaction
-        />
-      </div>
-
-      {/* 4. TRIGGER READY (Pulsing Button) */}
-      {state.status === EventStatus.TRIGGER_READY && (
-        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-[#000510]/90 backdrop-blur-sm">
-          <div className="text-center">
-            <div className="font-orbitron text-cyan-400 text-2xl mb-16 tracking-[0.3em] glow-text">INITIATE FINAL LAUNCH</div>
-            <div className="relative w-80 h-80 md:w-96 md:h-96 mx-auto cursor-pointer flex items-center justify-center">
-              <div className="absolute inset-0 bg-cyan-500/20 rounded-full animate-ping"></div>
-              <div className="absolute inset-0 border-4 border-cyan-500 rounded-full animate-pulse-neon"></div>
-              <div className="z-10 text-white font-orbitron font-bold text-4xl tracking-tighter text-center">
-                TOUCH TO<br/><span className="text-cyan-400 uppercase text-5xl">ACTIVATE</span>
-              </div>
+      {/* Video States (Clip Chờ & Clip Chính) */}
+      {unlocked && (state.status === EventStatus.COUNTDOWN || state.status === EventStatus.ACTIVATED) && (
+        <div className="absolute inset-0 z-10 bg-black animate-in fade-in duration-700">
+          {(() => {
+            const isMuted = state.status === EventStatus.COUNTDOWN;
+            const url = isMuted ? state.countdownUrl : state.activatedUrl;
+            const media = getMediaSource(url, isMuted);
+            
+            return media.type === 'youtube' ? (
+              <iframe 
+                key={state.status + state.timestamp}
+                src={media.src}
+                className="w-full h-full pointer-events-none scale-[1.3] md:scale-[1.1]"
+                frameBorder="0"
+                allow="autoplay; encrypted-media"
+                onLoad={handleMediaReady}
+              />
+            ) : (
+              <video 
+                ref={videoRef}
+                key={state.status + state.timestamp}
+                src={media.src}
+                className="w-full h-full object-cover"
+                autoPlay playsInline 
+                muted={isMuted}
+                loop={isMuted}
+                onLoadedData={handleMediaReady}
+                onPlaying={handleMediaReady}
+              />
+            );
+          })()}
+          
+          {state.status === EventStatus.COUNTDOWN && (
+            <div className="absolute bottom-10 left-10 z-50 px-4 py-2 border border-cyan-500/20 bg-black/40 backdrop-blur-md rounded-lg">
+               <div className="text-[10px] font-orbitron text-cyan-400 tracking-[0.2em] animate-pulse">SYSTEM STANDBY MODE</div>
             </div>
-          </div>
+          )}
+
+          {state.status === EventStatus.ACTIVATED && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-40 bg-black/10">
+               <div className="border-y border-cyan-500/30 py-6 px-20 bg-black/60 backdrop-blur-xl animate-in zoom-in duration-1000">
+                  <h2 className="text-6xl md:text-9xl font-orbitron font-bold text-white glow-text tracking-tighter">LAUNCHED</h2>
+               </div>
+            </div>
+          )}
         </div>
       )}
 
-      {/* 5. ACTIVATED VIDEO */}
-      <div className={`absolute inset-0 transition-opacity duration-1000 ${state.status === EventStatus.ACTIVATED ? 'opacity-100 z-30' : 'opacity-0 -z-10'}`}>
-        <video 
-          ref={activatedVideoRef}
-          src={state.activatedUrl}
-          className="w-full h-full object-cover"
-          playsInline
-          webkit-playsinline="true"
-        />
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className="px-12 py-6 border-y-4 border-cyan-400 bg-black/40 backdrop-blur-md">
-            <h2 className="text-7xl md:text-9xl font-orbitron font-bold text-white glow-text tracking-tighter">LAUNCHED</h2>
-          </div>
-        </div>
-      </div>
-
+      <style>{`
+        @keyframes loading {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(100%); }
+        }
+        .bg-grid {
+          background-image: linear-gradient(to right, rgba(0, 242, 255, 0.03) 1px, transparent 1px),
+                            linear-gradient(to bottom, rgba(0, 242, 255, 0.03) 1px, transparent 1px);
+          background-size: 40px 40px;
+        }
+      `}</style>
     </div>
   );
 };
