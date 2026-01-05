@@ -1,6 +1,7 @@
 
 import { initializeApp } from 'firebase/app';
 import { getDatabase, ref, onValue, set, update } from 'firebase/database';
+import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { AppState, INITIAL_STATE } from '../types';
 
 // NOTE: Replace these with your actual Firebase project config from the Firebase Console
@@ -16,6 +17,7 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
+const storage = getStorage(app);
 const stateRef = ref(db, 'eventState');
 
 export const syncState = (callback: (state: AppState) => void) => {
@@ -41,4 +43,10 @@ export const updateUrls = (countdownUrl: string, activatedUrl: string) => {
 
 export const resetSystem = () => {
   return set(stateRef, INITIAL_STATE);
+};
+
+export const uploadVideo = async (file: File, path: string): Promise<string> => {
+  const fileRef = storageRef(storage, `videos/${path}_${Date.now()}_${file.name}`);
+  await uploadBytes(fileRef, file);
+  return await getDownloadURL(fileRef);
 };
