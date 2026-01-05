@@ -1,0 +1,8 @@
+{
+  "name": "AI Young Guru - Event Sync System",
+  "description": "A synchronized multi-device event activation system for iPad stage displays and LED screens, controlled by a central Admin dashboard using Firebase Realtime Database.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}

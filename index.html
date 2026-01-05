@@ -1,0 +1,57 @@
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>AI Young Guru - Launch Event</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        background-color: #000510;
+        color: #e0f2fe;
+        font-family: 'Inter', sans-serif;
+        overflow: hidden;
+        -webkit-touch-callout: none;
+        -webkit-user-select: none;
+        user-select: none;
+      }
+      .font-orbitron { font-family: 'Orbitron', sans-serif; }
+      
+      @keyframes pulse-neon {
+        0%, 100% { box-shadow: 0 0 10px #00f2ff, 0 0 20px #00f2ff; opacity: 1; }
+        50% { box-shadow: 0 0 25px #00f2ff, 0 0 50px #00f2ff; opacity: 0.8; }
+      }
+      .animate-pulse-neon {
+        animation: pulse-neon 2s infinite ease-in-out;
+      }
+      
+      .bg-grid {
+        background-image: linear-gradient(to right, rgba(0, 242, 255, 0.05) 1px, transparent 1px),
+                          linear-gradient(to bottom, rgba(0, 242, 255, 0.05) 1px, transparent 1px);
+        background-size: 40px 40px;
+      }
+
+      .glow-text {
+        text-shadow: 0 0 10px rgba(0, 242, 255, 0.8), 0 0 20px rgba(0, 242, 255, 0.4);
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3",
+    "firebase/": "https://esm.sh/firebase@^12.7.0/",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react-router-dom": "https://esm.sh/react-router-dom@^7.11.0"
+  }
+}
+</script>
+</head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
