@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { AppState, EventStatus } from '../types.ts';
-import { syncState, getServerTime } from '../services/firebase.ts';
+import { syncState, getServerTime, trackDevice } from '../services/firebase.ts';
 
 const ClientView: React.FC = () => {
   const [state, setState] = useState<AppState | null>(null);
@@ -12,8 +12,11 @@ const ClientView: React.FC = () => {
   const prevStateRef = useRef<AppState | null>(null);
   const loadingTimeoutRef = useRef<any>(null);
   
-  // 1. Đồng bộ trạng thái từ Firebase
+  // 1. Đồng bộ trạng thái và Theo dõi thiết bị
   useEffect(() => {
+    // Đánh dấu thiết bị này đang kết nối
+    trackDevice();
+
     const unsubscribe = syncState((newState) => {
       const prev = prevStateRef.current;
       
@@ -23,7 +26,6 @@ const ClientView: React.FC = () => {
         (newState.status === EventStatus.ACTIVATED && newState.activatedUrl !== prev.activatedUrl)
       );
 
-      // Nếu có sự thay đổi quan trọng, kích hoạt loading overlay
       if ((statusChanged || urlChanged || newState.timestamp !== prev?.timestamp) && newState.status !== EventStatus.WAITING) {
         setIsMediaLoading(true);
         if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
@@ -42,19 +44,17 @@ const ClientView: React.FC = () => {
     };
   }, []);
 
-  // 2. Logic phát video với thời gian đồng bộ chuẩn
+  // 2. Logic phát video
   useEffect(() => {
     if (unlocked && state && state.status !== EventStatus.WAITING) {
       const isMuted = state.status === EventStatus.COUNTDOWN;
       const url = isMuted ? state.countdownUrl : state.activatedUrl;
       const media = getMediaSource(url, isMuted);
 
-      // CỰC KỲ QUAN TRỌNG: Sử dụng getServerTime() thay vì Date.now()
       const currentServerTime = getServerTime();
       const elapsedSeconds = Math.max(0, (currentServerTime - state.timestamp) / 1000);
 
       if (media.type === 'native' && videoRef.current) {
-        // Tối ưu: Chỉ reload nếu SRC thay đổi
         if (videoRef.current.src !== media.src) {
           videoRef.current.src = media.src;
           videoRef.current.load();
@@ -62,8 +62,6 @@ const ClientView: React.FC = () => {
         
         videoRef.current.muted = isMuted;
         videoRef.current.loop = isMuted;
-        
-        // Nhảy đến vị trí thời gian đã trôi qua
         videoRef.current.currentTime = elapsedSeconds;
         
         const playPromise = videoRef.current.play();
@@ -76,15 +74,12 @@ const ClientView: React.FC = () => {
     }
   }, [state?.status, state?.timestamp, state?.countdownUrl, state?.activatedUrl, unlocked]);
 
-  // Sync định kỳ (mỗi 2 giây) để đảm bảo video không bị drift theo thời gian dài
   useEffect(() => {
     const driftCheck = setInterval(() => {
       if (unlocked && state && state.status !== EventStatus.WAITING && videoRef.current && !videoRef.current.paused) {
         const currentServerTime = getServerTime();
         const expectedTime = (currentServerTime - state.timestamp) / 1000;
         const actualTime = videoRef.current.currentTime;
-        
-        // Nếu lệch quá 0.3s thì sync lại thầm lặng
         if (Math.abs(expectedTime - actualTime) > 0.3) {
           videoRef.current.currentTime = expectedTime;
         }
@@ -111,7 +106,6 @@ const ClientView: React.FC = () => {
   const getMediaSource = (url: string, isMuted: boolean = true) => {
     const youtubeRegex = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
     const match = url.match(youtubeRegex);
-    // Tính startParam dựa trên getServerTime
     const startParam = state ? Math.floor(Math.max(0, (getServerTime() - state.timestamp) / 1000)) : 0;
 
     if (match && match[2].length === 11) {

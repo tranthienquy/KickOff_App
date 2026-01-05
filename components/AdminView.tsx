@@ -1,11 +1,12 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { AppState, EventStatus } from '../types.ts';
-import { syncState, updateStatus, updateUrls, resetSystem, isFirebaseConnected, storage } from '../services/firebase.ts';
+import { syncState, updateStatus, updateUrls, isFirebaseConnected, storage, syncDeviceCount, trackDevice } from '../services/firebase.ts';
 import { ref as sRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 
 const AdminView: React.FC = () => {
   const [state, setState] = useState<AppState | null>(null);
+  const [deviceCount, setDeviceCount] = useState(0);
   const [countdownUrl, setCountdownUrl] = useState('');
   const [activatedUrl, setActivatedUrl] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
@@ -17,13 +18,24 @@ const AdminView: React.FC = () => {
   const activatedInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const unsubscribe = syncState((newState) => {
+    // Admin cũng tính là 1 thiết bị kết nối
+    trackDevice();
+
+    const unsubscribeState = syncState((newState) => {
       setState(newState);
-      setPendingStatus(null); // Reset trạng thái chờ khi Firebase đã cập nhật
+      setPendingStatus(null);
       if (!countdownUrl) setCountdownUrl(newState.countdownUrl);
       if (!activatedUrl) setActivatedUrl(newState.activatedUrl);
     });
-    return () => unsubscribe();
+
+    const unsubscribeDevices = syncDeviceCount((count) => {
+      setDeviceCount(count);
+    });
+
+    return () => {
+      unsubscribeState();
+      unsubscribeDevices();
+    };
   }, []);
 
   const handleStatusChange = async (status: EventStatus) => {
@@ -72,17 +84,24 @@ const AdminView: React.FC = () => {
     <div className="min-h-screen bg-[#020617] text-slate-200 font-inter p-4 md:p-6 pb-24">
       <div className="max-w-4xl mx-auto space-y-6">
         
-        <div className="flex justify-between items-center p-5 bg-slate-900/50 border border-slate-800 rounded-2xl">
-          <h1 className="text-lg font-orbitron font-bold text-white flex items-center gap-3">
-            <span className={`w-2 h-2 rounded-full ${connected ? 'bg-emerald-500 shadow-[0_0_8px_#10b981]' : 'bg-red-500'}`}></span>
-            COMMAND CENTER
-          </h1>
-          <div className="px-4 py-1 bg-slate-950 border border-slate-800 rounded-lg text-cyan-400 font-orbitron text-xs font-bold uppercase">
-            {state.status}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 p-5 bg-slate-900/50 border border-slate-800 rounded-2xl">
+          <div className="space-y-1">
+            <h1 className="text-lg font-orbitron font-bold text-white flex items-center gap-3">
+              <span className={`w-2.5 h-2.5 rounded-full ${connected ? 'bg-emerald-500 shadow-[0_0_10px_#10b981]' : 'bg-red-500'}`}></span>
+              COMMAND CENTER
+            </h1>
+            <div className="flex items-center gap-2 text-slate-400">
+              <span className="inline-block w-2 h-2 rounded-full bg-cyan-500 animate-pulse"></span>
+              <span className="text-[10px] font-orbitron uppercase tracking-widest">
+                {deviceCount} DEVICES ONLINE
+              </span>
+            </div>
+          </div>
+          <div className="px-4 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-cyan-400 font-orbitron text-[10px] font-bold uppercase tracking-tighter">
+            System: {state.status}
           </div>
         </div>
 
-        {/* Nút điều khiển với phản hồi tức thì */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {[
             { id: EventStatus.WAITING, label: 'STANDBY (LOGO)', icon: '💤', color: 'slate' },
@@ -105,7 +124,7 @@ const AdminView: React.FC = () => {
           ))}
         </div>
 
-        <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 md:p-8 space-y-8">
+        <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 md:p-8 space-y-8 shadow-2xl">
           <h2 className="text-xs font-orbitron font-bold text-slate-500 uppercase tracking-widest">Media Asset Management</h2>
           
           <div className="space-y-8">
@@ -114,14 +133,14 @@ const AdminView: React.FC = () => {
               { label: '2. CLIP CHÍNH SOURCE', url: activatedUrl, set: setActivatedUrl, ref: activatedInputRef, prog: uploadProgress.activated, type: 'activated' }
             ].map((field, i) => (
               <div key={i} className="space-y-3">
-                <label className="text-[10px] font-orbitron text-slate-400 tracking-wider">{field.label}</label>
+                <label className="text-[10px] font-orbitron text-slate-400 tracking-wider uppercase">{field.label}</label>
                 <div className="flex gap-2">
                   <input 
                     type="text" value={field.url} onChange={(e) => field.set(e.target.value)}
-                    className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-4 py-3 text-xs outline-none focus:border-cyan-500/50"
+                    className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-4 py-3 text-xs outline-none focus:border-cyan-500/50 transition-colors"
                   />
                   <input type="file" ref={field.ref} className="hidden" accept="video/*" onChange={(e) => handleFileUpload(e, field.type as any)} />
-                  <button onClick={() => field.ref.current?.click()} className="px-4 bg-slate-800 hover:bg-slate-700 rounded-lg text-[9px] font-orbitron border border-slate-700">
+                  <button onClick={() => field.ref.current?.click()} className="px-4 bg-slate-800 hover:bg-slate-700 rounded-lg text-[9px] font-orbitron border border-slate-700 transition-colors">
                     {field.prog > 0 ? `${field.prog}%` : 'FILE'}
                   </button>
                 </div>
@@ -133,7 +152,7 @@ const AdminView: React.FC = () => {
             <button 
               onClick={handleUpdateUrls}
               disabled={isUpdating}
-              className="px-10 py-3 bg-cyan-600 hover:bg-cyan-500 text-white font-orbitron font-bold rounded-lg transition-all disabled:opacity-50 text-xs tracking-widest"
+              className="px-10 py-4 bg-cyan-600 hover:bg-cyan-500 text-white font-orbitron font-bold rounded-lg transition-all disabled:opacity-50 text-xs tracking-widest shadow-lg shadow-cyan-900/20 active:scale-95"
             >
               {isUpdating ? 'UPLOADING...' : 'PUSH TO ALL DEVICES'}
             </button>

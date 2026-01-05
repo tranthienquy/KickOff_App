@@ -1,6 +1,6 @@
 
 import { initializeApp } from 'firebase/app';
-import { getDatabase, ref, onValue, set, update, Database } from 'firebase/database';
+import { getDatabase, ref, onValue, set, update, Database, onDisconnect, push } from 'firebase/database';
 import { getStorage, FirebaseStorage } from 'firebase/storage';
 import { AppState, INITIAL_STATE } from '../types.ts';
 
@@ -27,11 +27,9 @@ if (isConfigValid) {
     db = getDatabase(app);
     storage = getStorage(app);
     
-    // Theo dõi độ lệch thời gian giữa Client và Server
     const offsetRef = ref(db, ".info/serverTimeOffset");
     onValue(offsetRef, (snap) => {
       serverTimeOffset = snap.val() || 0;
-      console.log("⏰ Server time offset updated:", serverTimeOffset, "ms");
     });
 
   } catch (error) {
@@ -40,11 +38,39 @@ if (isConfigValid) {
 }
 
 const stateRef = db ? ref(db, 'eventState') : null;
+const connectionsRef = db ? ref(db, 'activeConnections') : null;
 
 export { storage };
 
-// Hàm lấy thời gian chuẩn đã đồng bộ với Server
 export const getServerTime = () => Date.now() + serverTimeOffset;
+
+// Theo dõi thiết bị kết nối
+export const trackDevice = () => {
+  if (!db || !connectionsRef) return;
+  
+  const connectedRef = ref(db, ".info/connected");
+  onValue(connectedRef, (snap) => {
+    if (snap.val() === true) {
+      const myConnectionRef = push(connectionsRef);
+      // Khi mất kết nối, tự động xóa node này
+      onDisconnect(myConnectionRef).remove();
+      // Đánh dấu thiết bị đang online
+      set(myConnectionRef, {
+        lastSeen: getServerTime(),
+        userAgent: navigator.userAgent
+      });
+    }
+  });
+};
+
+// Lấy số lượng thiết bị đang online
+export const syncDeviceCount = (callback: (count: number) => void) => {
+  if (!connectionsRef) return () => {};
+  return onValue(connectionsRef, (snap) => {
+    const data = snap.val();
+    callback(data ? Object.keys(data).length : 0);
+  });
+};
 
 let localState = { ...INITIAL_STATE };
 let localListeners: ((state: AppState) => void)[] = [];
@@ -75,13 +101,6 @@ export const updateStatus = (status: AppState['status']) => {
 export const updateUrls = (countdownUrl: string, activatedUrl: string) => {
   if (stateRef) return update(stateRef, { countdownUrl, activatedUrl, timestamp: getServerTime() });
   localState = { ...localState, countdownUrl, activatedUrl, timestamp: getServerTime() };
-  localListeners.forEach(l => l(localState));
-};
-
-export const resetSystem = () => {
-  const resetState = { ...INITIAL_STATE, timestamp: getServerTime() };
-  if (stateRef) return set(stateRef, resetState);
-  localState = resetState;
   localListeners.forEach(l => l(localState));
 };
 
