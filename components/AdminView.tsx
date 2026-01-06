@@ -150,7 +150,7 @@ const AdminView: React.FC = () => {
           </div>
         </div>
 
-        {/* Quick Actions - Updated to 2 columns */}
+        {/* Quick Actions - Status Switching */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {[
             { id: EventStatus.WAITING, label: 'STANDBY (LOGO)', icon: '💤', color: 'slate' },
@@ -159,17 +159,35 @@ const AdminView: React.FC = () => {
             <button 
               key={btn.id}
               onClick={() => handleStatusChange(btn.id)}
-              disabled={pendingStatus === btn.id}
-              className={`p-8 rounded-xl border transition-all duration-300 active:scale-95 flex flex-col items-center gap-3 ${
+              className={`p-8 rounded-xl border transition-all duration-300 active:scale-95 flex flex-col items-center gap-3 relative overflow-hidden group ${
                 state.status === btn.id 
                   ? `bg-${btn.color}-500/20 border-${btn.color}-500 shadow-[0_0_30px_rgba(0,0,0,0.3)]` 
                   : 'bg-slate-900/50 border-slate-800 hover:border-slate-700'
               } ${pendingStatus === btn.id ? 'opacity-50 animate-pulse' : ''}`}
             >
-              <div className="text-4xl filter drop-shadow-md">{btn.icon}</div>
+              <div className="text-4xl filter drop-shadow-md group-hover:scale-110 transition-transform">{btn.icon}</div>
               <div className="font-orbitron font-bold text-xs text-white uppercase tracking-wider">{btn.label}</div>
+              {state.status === btn.id && (
+                 <div className="absolute top-2 right-2 text-[10px] text-white/50 font-mono">ACTIVE</div>
+              )}
             </button>
           ))}
+        </div>
+
+        {/* RESTART CONTROLS - Added specific buttons for resetting clips */}
+        <div className="grid grid-cols-2 gap-4 -mt-2">
+            <button 
+                onClick={() => handleStatusChange(EventStatus.WAITING)}
+                className="bg-slate-800/50 hover:bg-slate-700 border border-slate-700 hover:border-slate-500 text-slate-300 py-3 rounded-lg font-orbitron text-[10px] font-bold tracking-widest uppercase flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg"
+            >
+                <span className="text-lg">↺</span> RESTART LOOP
+            </button>
+            <button 
+                onClick={() => handleStatusChange(EventStatus.ACTIVATED)}
+                className="bg-emerald-900/30 hover:bg-emerald-900/50 border border-emerald-800 hover:border-emerald-500 text-emerald-400 py-3 rounded-lg font-orbitron text-[10px] font-bold tracking-widest uppercase flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg"
+            >
+                <span className="text-lg">⏮</span> RESTART MAIN CLIP
+            </button>
         </div>
 
         {/* UI Text Settings */}
