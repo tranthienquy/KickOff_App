@@ -48,9 +48,8 @@ const AdminView: React.FC = () => {
     setForm(prev => ({ ...prev, [key]: value }));
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'waiting' | 'countdown' | 'activated' | 'splash') => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'waiting' | 'activated' | 'splash') => {
     const file = e.target.files?.[0];
-    // QUAN TRỌNG: Reset giá trị input để cho phép chọn lại cùng 1 file nếu lần trước bị lỗi
     e.target.value = ''; 
     
     if (!storage) {
@@ -60,7 +59,6 @@ const AdminView: React.FC = () => {
 
     if (!file) return;
 
-    // Set trạng thái bắt đầu
     setUploadProgress(prev => ({ ...prev, [type]: 1 }));
 
     try {
@@ -73,7 +71,6 @@ const AdminView: React.FC = () => {
       uploadTask.on('state_changed', 
         (snap) => {
            const percent = Math.round((snap.bytesTransferred / snap.totalBytes) * 100);
-           // Luôn hiển thị ít nhất 1% để người dùng biết đang xử lý
            setUploadProgress(prev => ({ ...prev, [type]: percent || 1 }));
         }, 
         (error: any) => {
@@ -81,11 +78,11 @@ const AdminView: React.FC = () => {
           let errorMessage = error.message;
           
           if (error.code === 'storage/unauthorized') {
-             errorMessage = "LỖI QUYỀN (403): Bạn chưa mở quyền ghi cho Storage. Vào Firebase Console > Storage > Rules > Sửa thành 'allow read, write: if true;'";
+             errorMessage = "LỖI QUYỀN (403): Bạn chưa mở quyền ghi cho Storage.";
           } else if (error.code === 'storage/canceled') {
              errorMessage = "Upload bị hủy.";
           } else if (error.code === 'storage/unknown') {
-             errorMessage = "Lỗi không xác định (có thể do CORS nếu chạy Localhost hoặc file quá lớn).";
+             errorMessage = "Lỗi không xác định.";
           }
           
           alert(`Upload thất bại: ${errorMessage}`);
@@ -97,12 +94,10 @@ const AdminView: React.FC = () => {
               const keyMap = {
                 splash: 'splashVideoUrl',
                 waiting: 'waitingUrl',
-                countdown: 'countdownUrl',
                 activated: 'activatedUrl'
               } as const;
               handleInputChange(keyMap[type], url);
               setUploadProgress(prev => ({ ...prev, [type]: 0 }));
-              // Tự động lưu form hoặc thông báo
               console.log(`Uploaded ${type}: ${url}`);
           } catch (urlError: any) {
               alert(`Lỗi lấy URL sau khi upload: ${urlError.message}`);
@@ -135,7 +130,6 @@ const AdminView: React.FC = () => {
   );
 
   return (
-    // CHANGE: Use h-screen + overflow-y-auto to force internal scrolling
     <div className="h-screen w-full overflow-y-auto bg-[#0f0400] text-orange-50 font-inter p-4 md:p-6 pb-24 selection:bg-orange-500/30">
       <div className="max-w-7xl mx-auto space-y-6">
         
@@ -144,7 +138,7 @@ const AdminView: React.FC = () => {
           <div className="space-y-1">
             <h1 className="text-lg font-orbitron font-bold text-white flex items-center gap-3">
               <span className={`w-3 h-3 rounded-full ${connected ? 'bg-emerald-500 shadow-[0_0_15px_#10b981]' : 'bg-red-500 shadow-[0_0_15px_#ef4444]'}`}></span>
-              COMMAND CENTER v2.2
+              COMMAND CENTER v2.3
             </h1>
             <div className="flex gap-4 text-[10px] font-orbitron uppercase tracking-widest">
               <span className="text-emerald-400">{deviceStats.online} Active Devices</span>
@@ -156,25 +150,24 @@ const AdminView: React.FC = () => {
           </div>
         </div>
 
-        {/* Quick Actions */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Quick Actions - Updated to 2 columns */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {[
             { id: EventStatus.WAITING, label: 'STANDBY (LOGO)', icon: '💤', color: 'slate' },
-            { id: EventStatus.COUNTDOWN, label: 'RUN CLIP CHỜ', icon: '📽️', color: 'orange' },
             { id: EventStatus.ACTIVATED, label: 'RUN CLIP CHÍNH', icon: '🚀', color: 'emerald' }
           ].map((btn) => (
             <button 
               key={btn.id}
               onClick={() => handleStatusChange(btn.id)}
               disabled={pendingStatus === btn.id}
-              className={`p-6 rounded-xl border transition-all duration-300 active:scale-95 flex flex-col items-center gap-3 ${
+              className={`p-8 rounded-xl border transition-all duration-300 active:scale-95 flex flex-col items-center gap-3 ${
                 state.status === btn.id 
                   ? `bg-${btn.color}-500/20 border-${btn.color}-500 shadow-[0_0_30px_rgba(0,0,0,0.3)]` 
                   : 'bg-slate-900/50 border-slate-800 hover:border-slate-700'
               } ${pendingStatus === btn.id ? 'opacity-50 animate-pulse' : ''}`}
             >
-              <div className="text-3xl filter drop-shadow-md">{btn.icon}</div>
-              <div className="font-orbitron font-bold text-[10px] text-white uppercase tracking-wider">{btn.label}</div>
+              <div className="text-4xl filter drop-shadow-md">{btn.icon}</div>
+              <div className="font-orbitron font-bold text-xs text-white uppercase tracking-wider">{btn.label}</div>
             </button>
           ))}
         </div>
@@ -183,7 +176,7 @@ const AdminView: React.FC = () => {
         <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 md:p-8 space-y-6 shadow-xl">
           <h2 className="text-xs font-orbitron font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
             <span className="w-4 h-[1px] bg-slate-700"></span>
-            Visual Text Calibration (Saved to Database)
+            Visual Text Calibration
           </h2>
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -212,7 +205,6 @@ const AdminView: React.FC = () => {
             </div>
           </div>
 
-          {/* New Scrolling Text Field */}
           <div className="space-y-2">
              <label className="text-[9px] font-orbitron text-orange-400 uppercase tracking-widest">Scrolling Message (Footer)</label>
              <input 
@@ -225,31 +217,29 @@ const AdminView: React.FC = () => {
           </div>
         </div>
 
-        {/* Media Asset Management */}
+        {/* Media Asset Management - Updated to 3 columns for better fit */}
         <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 md:p-8 space-y-6 shadow-2xl">
           <h2 className="text-xs font-orbitron font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
             <span className="w-4 h-[1px] bg-slate-700"></span>
             Media Asset Pipeline
           </h2>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {[
               { label: 'SPLASH SCREEN VIDEO', key: 'splashVideoUrl', type: 'splash' },
               { label: 'WAITING LOOP VIDEO', key: 'waitingUrl', type: 'waiting' },
-              { label: 'COUNTDOWN SOURCE', key: 'countdownUrl', type: 'countdown' },
               { label: 'MAIN ACTIVATION CLIP', key: 'activatedUrl', type: 'activated' }
             ].map((field) => (
               <div key={field.key} className="space-y-3">
                 <label className="text-[10px] font-orbitron text-slate-400 tracking-wider uppercase">{field.label}</label>
-                <div className="flex gap-2">
+                <div className="flex flex-col gap-2">
                   <input 
                     type="text" 
                     value={(form as any)[field.key] || ''} 
                     onChange={e => handleInputChange(field.key as any, e.target.value)}
-                    className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-4 py-3 text-xs outline-none focus:border-orange-500/50 transition-all font-mono text-orange-300/70"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-3 text-xs outline-none focus:border-orange-500/50 transition-all font-mono text-orange-300/70"
                     placeholder="Enter URL..."
                   />
-                  {/* FIX: Use Label + ID instead of Refs */}
                   <input 
                     type="file" 
                     id={`file-upload-${field.type}`}
@@ -259,7 +249,7 @@ const AdminView: React.FC = () => {
                   />
                   <label 
                     htmlFor={`file-upload-${field.type}`}
-                    className={`px-4 rounded-lg text-[9px] font-orbitron border transition-all whitespace-nowrap cursor-pointer flex items-center justify-center min-w-[100px]
+                    className={`w-full py-2 rounded-lg text-[9px] font-orbitron border transition-all whitespace-nowrap cursor-pointer flex items-center justify-center
                       ${(uploadProgress as any)[field.type] > 0 
                         ? 'bg-orange-900/50 border-orange-500 text-orange-400 animate-pulse' 
                         : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300'}`}
