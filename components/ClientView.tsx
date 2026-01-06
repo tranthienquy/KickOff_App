@@ -26,56 +26,25 @@ const MediaLayer = memo(({
     // Nếu là video native (.mp4)
     if (type === 'native' && videoRef.current) {
       if (isActive) {
-        // Hàm tính toán và đồng bộ
-        const performSync = () => {
-          const video = videoRef.current;
-          if (!video || video.paused && video.readyState < 2) return; // Chưa sẵn sàng thì bỏ qua
-
+        // Khi Active: Đảm bảo video chạy và đúng thời gian
+        const syncVideo = () => {
           const now = getServerTime();
-          // Thời gian lý tưởng video phải đang chạy ở đây
-          const expectedTime = Math.max(0, (now - timestamp) / 1000);
+          const elapsed = Math.max(0, (now - timestamp) / 1000);
           
-          // Độ lệch giữa thực tế và lý tưởng
-          const drift = Math.abs(video.currentTime - expectedTime);
-
-          // LOGIC XỬ LÝ WIFI YẾU / BUFFERING:
-          // Nếu lệch > 0.25s (do mạng lag load chậm, hoặc do máy chậm):
-          // -> Ép buộc nhảy (seek) ngay lập tức đến thời gian chuẩn.
-          if (drift > 0.25) {
-             console.log(`⚠️ Sync Drift Detected: ${drift.toFixed(2)}s. Seeking to ${expectedTime.toFixed(2)}s`);
-             video.currentTime = expectedTime;
+          // Chỉ seek nếu lệch quá 0.5s để video mượt
+          if (Math.abs(videoRef.current!.currentTime - elapsed) > 0.5) {
+            videoRef.current!.currentTime = elapsed;
           }
           
-          // Nếu video đang bị pause (do trình duyệt chặn hoặc lag), ép chạy lại
-          if (video.paused && video.readyState >= 2) {
-             video.play().catch(e => console.warn("Auto-play force:", e));
+          if (videoRef.current!.paused) {
+            videoRef.current!.play().catch(e => console.log("Auto-play blocked:", e));
           }
         };
 
-        // 1. Chạy ngay lập tức khi Active
-        performSync();
-
-        // 2. Vòng lặp kiểm tra liên tục (Watchdog) - 1 giây/lần
-        const interval = setInterval(performSync, 1000);
-
-        // 3. Event Listeners cho trường hợp mạng yếu (Weak Wifi Handling)
-        // Khi mạng lag, video sẽ rơi vào trạng thái 'waiting' hoặc 'stalled'.
-        // Ngay khi mạng có lại, video chuyển sang 'playing'. Lúc này ta KHÔNG chờ interval (có thể mất 1s),
-        // mà ta buộc sync NGAY LẬP TỨC để bắt kịp các máy khác.
-        const onBufferRecovery = () => {
-            console.log("📶 Network recovered / Video playing. Forcing sync...");
-            performSync();
-        };
-
-        const videoEl = videoRef.current;
-        videoEl.addEventListener('playing', onBufferRecovery);
-        videoEl.addEventListener('seeked', onBufferRecovery); // Kiểm tra lại sau khi seek
-
-        return () => {
-            clearInterval(interval);
-            videoEl.removeEventListener('playing', onBufferRecovery);
-            videoEl.removeEventListener('seeked', onBufferRecovery);
-        };
+        syncVideo();
+        // Check drift mỗi giây
+        const interval = setInterval(syncVideo, 2000);
+        return () => clearInterval(interval);
       } else {
         // Khi Inactive: Pause để tiết kiệm tài nguyên
         videoRef.current.pause();
@@ -96,8 +65,8 @@ const MediaLayer = memo(({
           className="w-full h-full object-cover"
           playsInline
           preload="auto"
-          muted={!isActive} // Mute khi ẩn để tránh lỗi AudioContext
-          loop={false} // Clip chính thường không loop, logic sync sẽ lo việc giữ time
+          muted={!isActive}
+          loop={true}
         />
       ) : (
         <iframe
@@ -149,7 +118,7 @@ const ClientView: React.FC = () => {
          LAYER SYSTEM
       */}
       
-      {/* 1. Waiting Layer - Loop = true (xử lý logic trong MediaLayer nếu cần hoặc mặc định video tag) */}
+      {/* 1. Waiting Layer */}
       <MediaLayer 
         url={state.waitingUrl} 
         isActive={isWaiting} 
@@ -179,11 +148,11 @@ const ClientView: React.FC = () => {
               autoPlay muted loop playsInline
             />
           )}
-          <div className="text-center space-y-8 z-10 px-6 b p-4 ">
+          <div className="text-center space-y-8 z-10 px-6 b p-12 ">
             <h1 className="text-4xl md:text-7xl font-orbitron font-bold text-white tracking-tighter drop-shadow-[0_0_15px_rgba(249,115,22,0.8)]">
               {state.titlePrefix} <span className="text-orange-500">{state.titleHighlight}</span> {state.titleSuffix}
             </h1>
-            <div className="flex flex-col gap-4 items-center ">
+            <div className="flex flex-col gap-4 items-center">
               <button 
                 onClick={handleUnlock}
                 className="group relative px-12 py-5 bg-orange-600 hover:bg-orange-500 text-white font-orbitron font-bold text-lg tracking-widest transition-all clip-path-polygon shadow-[0_0_30px_rgba(249,115,22,0.4)] hover:shadow-[0_0_50px_rgba(249,115,22,0.8)] hover:scale-105 active:scale-95"
@@ -197,9 +166,9 @@ const ClientView: React.FC = () => {
         </div>
       )}
 
-      {/* Waiting Overlay Indicator - Moved to bottom-4 (very close to edge) */}
-      <div className={`absolute bottom-4 left-1/2 -translate-x-1/2 z-[60] transition-opacity duration-500 ${isWaiting && unlocked ? 'opacity-100' : 'opacity-0'}`}>
-        <div className="flex items-center gap-4 px-10 py-3 rounded-full border border-orange-500/60 shadow-[0_0_30px_rgba(249,115,22,0.3)] backdrop-blur-[2px] bg-black/40">
+      {/* Waiting Overlay Indicator - Moved to bottom-12 */}
+      <div className={`absolute bottom-12 left-1/2 -translate-x-1/2 z-50 transition-opacity duration-500 ${isWaiting && unlocked ? 'opacity-100' : 'opacity-0'}`}>
+        <div className="flex items-center gap-4 px-10 py-3 rounded-full border border-orange-500/60 shadow-[0_0_30px_rgba(249,115,22,0.3)] backdrop-blur-[2px]">
             <div className="w-3 h-3 bg-orange-500 rounded-full animate-pulse shadow-[0_0_20px_#f97316]"></div>
             <span className="text-sm font-orbitron text-orange-400 font-bold tracking-[0.3em] drop-shadow-[0_2px_8px_rgba(0,0,0,1)]">{state.readyText}</span>
         </div>
