@@ -1,13 +1,11 @@
 export enum EventStatus {
   WAITING = 'waiting',
-  COUNTDOWN = 'countdown',
   ACTIVATED = 'activated'
 }
 
 export interface AppState {
   status: EventStatus;
   waitingUrl: string;
-  countdownUrl: string;
   activatedUrl: string;
   splashVideoUrl: string;
   buttonText: string;
@@ -21,9 +19,8 @@ export interface AppState {
 
 export const INITIAL_STATE: AppState = {
   status: EventStatus.WAITING,
-  // Video mẫu tạm thời (Google Sample Videos) để test giao diện
+  // Video mẫu tạm thời
   waitingUrl: 'https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4', 
-  countdownUrl: 'https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4', 
   activatedUrl: 'https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
   splashVideoUrl: 'https://storage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
   
