@@ -46,8 +46,7 @@ const MediaLayer = memo(({
         const interval = setInterval(syncVideo, 2000);
         return () => clearInterval(interval);
       } else {
-        // Khi Inactive: Pause để tiết kiệm tài nguyên (hoặc để chạy nền nếu muốn preload aggressive)
-        // Ở đây ta pause để tránh tiếng ồn chồng chéo, nhưng không unmount
+        // Khi Inactive: Pause để tiết kiệm tài nguyên
         videoRef.current.pause();
       }
     }
@@ -65,9 +64,9 @@ const MediaLayer = memo(({
           src={url}
           className="w-full h-full object-cover"
           playsInline
-          preload="auto" // Quan trọng: Tải trước toàn bộ
-          muted={!isActive} // Chỉ bật tiếng khi active
-          loop={true} // Mặc định loop, logic Activated có thể tắt loop nếu cần
+          preload="auto"
+          muted={!isActive}
+          loop={true}
         />
       ) : (
         <iframe
@@ -86,7 +85,6 @@ const ClientView: React.FC = () => {
   const [state, setState] = useState<AppState | null>(INITIAL_STATE);
   const [unlocked, setUnlocked] = useState(false);
   
-  // Ref để giữ trạng thái play audio khi unlock
   const dummyAudioRef = useRef<HTMLAudioElement>(null);
 
   useEffect(() => {
@@ -99,7 +97,6 @@ const ClientView: React.FC = () => {
 
   const handleUnlock = () => {
     setUnlocked(true);
-    // Kích hoạt Audio Context ngay lập tức bằng một tương tác người dùng
     if (dummyAudioRef.current) {
       dummyAudioRef.current.play().catch(() => {});
     }
@@ -109,7 +106,6 @@ const ClientView: React.FC = () => {
 
   // Xác định Video nào đang Active
   const isWaiting = state.status === EventStatus.WAITING;
-  const isCountdown = state.status === EventStatus.COUNTDOWN;
   const isActivated = state.status === EventStatus.ACTIVATED;
 
   // Helper check loại link
@@ -119,8 +115,7 @@ const ClientView: React.FC = () => {
     <div className="h-[100dvh] w-screen relative overflow-hidden bg-black select-none">
       
       {/* 
-         LAYER SYSTEM: Tất cả video đều được render nhưng ẩn hiện bằng Opacity 
-         Điều này giúp chuyển cảnh NGAY LẬP TỨC mà không cần load lại.
+         LAYER SYSTEM
       */}
       
       {/* 1. Waiting Layer */}
@@ -128,25 +123,16 @@ const ClientView: React.FC = () => {
         url={state.waitingUrl} 
         isActive={isWaiting} 
         type={getType(state.waitingUrl)}
-        timestamp={state.timestamp} // Waiting thường loop, timestamp ít quan trọng hơn nhưng vẫn truyền
+        timestamp={state.timestamp} 
         globalUnlocked={unlocked}
       />
 
-      {/* 2. Countdown Layer */}
-      <MediaLayer 
-        url={state.countdownUrl} 
-        isActive={isCountdown} 
-        type={getType(state.countdownUrl)}
-        timestamp={state.timestamp} // Countdown cần sync chính xác theo timestamp khi trigger
-        globalUnlocked={unlocked}
-      />
-
-      {/* 3. Activated Layer */}
+      {/* 2. Activated Layer */}
       <MediaLayer 
         url={state.activatedUrl} 
         isActive={isActivated} 
         type={getType(state.activatedUrl)}
-        timestamp={state.timestamp} // Activated chạy theo thời gian thực
+        timestamp={state.timestamp} 
         globalUnlocked={unlocked}
       />
 
@@ -180,7 +166,7 @@ const ClientView: React.FC = () => {
         </div>
       )}
 
-      {/* Waiting Overlay Indicator - Moved to bottom-12 for better aesthetic */}
+      {/* Waiting Overlay Indicator - Moved to bottom-12 */}
       <div className={`absolute bottom-12 left-1/2 -translate-x-1/2 z-50 transition-opacity duration-500 ${isWaiting && unlocked ? 'opacity-100' : 'opacity-0'}`}>
         <div className="flex items-center gap-4 px-10 py-3 rounded-full border border-orange-500/60 shadow-[0_0_30px_rgba(249,115,22,0.3)] backdrop-blur-[2px]">
             <div className="w-3 h-3 bg-orange-500 rounded-full animate-pulse shadow-[0_0_20px_#f97316]"></div>
