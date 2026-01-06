@@ -19,35 +19,79 @@ const MediaLayer = memo(({
   const videoRef = useRef<HTMLVideoElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
-  // Xử lý đồng bộ hóa thời gian (Sync Logic)
+  // Xử lý đồng bộ hóa thời gian (Smooth Sync Logic)
   useEffect(() => {
     if (!globalUnlocked || !url) return;
     
     // Nếu là video native (.mp4)
     if (type === 'native' && videoRef.current) {
       if (isActive) {
-        // Khi Active: Đảm bảo video chạy và đúng thời gian
-        const syncVideo = () => {
+        const video = videoRef.current;
+        
+        // Hàm đồng bộ mượt (Smooth Sync)
+        // Thay vì tua (seek) liên tục gây giật, ta điều chỉnh tốc độ (playbackRate)
+        const performSmoothSync = () => {
+          if (!video || (video.paused && video.readyState < 2)) return;
+
           const now = getServerTime();
-          const elapsed = Math.max(0, (now - timestamp) / 1000);
+          // Thời gian lý tưởng
+          const expectedTime = Math.max(0, (now - timestamp) / 1000);
           
-          // Chỉ seek nếu lệch quá 0.5s để video mượt
-          if (Math.abs(videoRef.current!.currentTime - elapsed) > 0.5) {
-            videoRef.current!.currentTime = elapsed;
+          // Tính độ lệch
+          const diff = video.currentTime - expectedTime;
+          const absDiff = Math.abs(diff);
+
+          // LOGIC XỬ LÝ:
+          
+          // 1. HARD SYNC: Nếu lệch quá nhiều (> 1.5s) -> Bắt buộc Seek (Nhảy cóc)
+          // Xảy ra khi: Mới vào trang, mạng rớt lâu, hoặc tua lại từ Admin.
+          if (absDiff > 1.5) {
+             console.log(`🔄 Hard Sync: Drift ${diff.toFixed(2)}s. Seeking...`);
+             video.currentTime = expectedTime;
+             video.playbackRate = 1.0; // Reset tốc độ
+          } 
+          // 2. SOFT SYNC: Nếu lệch nhẹ (0.05s - 1.5s) -> Điều chỉnh tốc độ
+          // Giúp video đuổi kịp hoặc chờ đợi một cách mượt mà, không bị khựng hình.
+          else if (absDiff > 0.05) {
+             // Nếu video đi NHANH hơn server -> Giảm tốc độ (0.95x)
+             // Nếu video đi CHẬM hơn server -> Tăng tốc độ (1.05x)
+             // Lưu ý: Safari/iOS đôi khi giới hạn range playbackRate, nhưng 0.9-1.1 thường OK.
+             const targetRate = diff > 0 ? 0.95 : 1.05;
+             
+             // Chỉ set lại nếu rate đang khác để tránh trigger event liên tục
+             if (Math.abs(video.playbackRate - targetRate) > 0.01) {
+                 video.playbackRate = targetRate;
+                 // console.log(`⏩ Smooth Sync: Adjusting rate to ${targetRate}x (Drift: ${diff.toFixed(3)}s)`);
+             }
+          } 
+          // 3. PERFECT SYNC: Nếu lệch rất ít (< 0.05s) -> Chạy tốc độ chuẩn
+          else {
+             if (video.playbackRate !== 1.0) {
+                 video.playbackRate = 1.0;
+             }
           }
           
-          if (videoRef.current!.paused) {
-            videoRef.current!.play().catch(e => console.log("Auto-play blocked:", e));
+          // Force play nếu bị pause bất thường (nhưng đã có dữ liệu)
+          if (video.paused && video.readyState >= 2) {
+             video.play().catch(e => {});
           }
         };
 
-        syncVideo();
-        // Check drift mỗi giây
-        const interval = setInterval(syncVideo, 2000);
-        return () => clearInterval(interval);
+        // Chạy ngay khi Active
+        performSmoothSync();
+
+        // Kiểm tra mỗi 500ms (Đủ nhanh để mượt, không quá tải CPU)
+        const interval = setInterval(performSmoothSync, 500);
+
+        return () => {
+            clearInterval(interval);
+            // Reset rate khi unmount/inactive
+            if (video) video.playbackRate = 1.0;
+        };
       } else {
-        // Khi Inactive: Pause để tiết kiệm tài nguyên
+        // Khi Inactive: Pause
         videoRef.current.pause();
+        videoRef.current.playbackRate = 1.0; // Reset rate
       }
     }
   }, [isActive, globalUnlocked, url, timestamp]);
@@ -66,7 +110,7 @@ const MediaLayer = memo(({
           playsInline
           preload="auto"
           muted={!isActive}
-          loop={true}
+          loop={false} // Tắt loop mặc định của thẻ video để sync logic tự xử lý
         />
       ) : (
         <iframe
@@ -148,11 +192,11 @@ const ClientView: React.FC = () => {
               autoPlay muted loop playsInline
             />
           )}
-          <div className="text-center space-y-8 z-10 px-6 b p-12 ">
+          <div className="text-center space-y-8 z-10 px-6 b p-4 ">
             <h1 className="text-4xl md:text-7xl font-orbitron font-bold text-white tracking-tighter drop-shadow-[0_0_15px_rgba(249,115,22,0.8)]">
               {state.titlePrefix} <span className="text-orange-500">{state.titleHighlight}</span> {state.titleSuffix}
             </h1>
-            <div className="flex flex-col gap-4 items-center">
+            <div className="flex flex-col gap-4 items-center ">
               <button 
                 onClick={handleUnlock}
                 className="group relative px-12 py-5 bg-orange-600 hover:bg-orange-500 text-white font-orbitron font-bold text-lg tracking-widest transition-all clip-path-polygon shadow-[0_0_30px_rgba(249,115,22,0.4)] hover:shadow-[0_0_50px_rgba(249,115,22,0.8)] hover:scale-105 active:scale-95"
@@ -166,9 +210,9 @@ const ClientView: React.FC = () => {
         </div>
       )}
 
-      {/* Waiting Overlay Indicator - Moved to bottom-12 */}
-      <div className={`absolute bottom-12 left-1/2 -translate-x-1/2 z-50 transition-opacity duration-500 ${isWaiting && unlocked ? 'opacity-100' : 'opacity-0'}`}>
-        <div className="flex items-center gap-4 px-10 py-3 rounded-full border border-orange-500/60 shadow-[0_0_30px_rgba(249,115,22,0.3)] backdrop-blur-[2px]">
+      {/* Waiting Overlay Indicator - Moved to bottom-4 (very close to edge) */}
+      <div className={`absolute bottom-4 left-1/2 -translate-x-1/2 z-[60] transition-opacity duration-500 ${isWaiting && unlocked ? 'opacity-100' : 'opacity-0'}`}>
+        <div className="flex items-center gap-4 px-10 py-3 rounded-full border border-orange-500/60 shadow-[0_0_30px_rgba(249,115,22,0.3)] backdrop-blur-[2px] bg-black/40">
             <div className="w-3 h-3 bg-orange-500 rounded-full animate-pulse shadow-[0_0_20px_#f97316]"></div>
             <span className="text-sm font-orbitron text-orange-400 font-bold tracking-[0.3em] drop-shadow-[0_2px_8px_rgba(0,0,0,1)]">{state.readyText}</span>
         </div>
