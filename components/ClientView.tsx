@@ -26,25 +26,56 @@ const MediaLayer = memo(({
     // Nếu là video native (.mp4)
     if (type === 'native' && videoRef.current) {
       if (isActive) {
-        // Khi Active: Đảm bảo video chạy và đúng thời gian
-        const syncVideo = () => {
+        // Hàm tính toán và đồng bộ
+        const performSync = () => {
+          const video = videoRef.current;
+          if (!video || video.paused && video.readyState < 2) return; // Chưa sẵn sàng thì bỏ qua
+
           const now = getServerTime();
-          const elapsed = Math.max(0, (now - timestamp) / 1000);
+          // Thời gian lý tưởng video phải đang chạy ở đây
+          const expectedTime = Math.max(0, (now - timestamp) / 1000);
           
-          // Chỉ seek nếu lệch quá 0.5s để video mượt
-          if (Math.abs(videoRef.current!.currentTime - elapsed) > 0.5) {
-            videoRef.current!.currentTime = elapsed;
+          // Độ lệch giữa thực tế và lý tưởng
+          const drift = Math.abs(video.currentTime - expectedTime);
+
+          // LOGIC XỬ LÝ WIFI YẾU / BUFFERING:
+          // Nếu lệch > 0.25s (do mạng lag load chậm, hoặc do máy chậm):
+          // -> Ép buộc nhảy (seek) ngay lập tức đến thời gian chuẩn.
+          if (drift > 0.25) {
+             console.log(`⚠️ Sync Drift Detected: ${drift.toFixed(2)}s. Seeking to ${expectedTime.toFixed(2)}s`);
+             video.currentTime = expectedTime;
           }
           
-          if (videoRef.current!.paused) {
-            videoRef.current!.play().catch(e => console.log("Auto-play blocked:", e));
+          // Nếu video đang bị pause (do trình duyệt chặn hoặc lag), ép chạy lại
+          if (video.paused && video.readyState >= 2) {
+             video.play().catch(e => console.warn("Auto-play force:", e));
           }
         };
 
-        syncVideo();
-        // Check drift mỗi giây
-        const interval = setInterval(syncVideo, 2000);
-        return () => clearInterval(interval);
+        // 1. Chạy ngay lập tức khi Active
+        performSync();
+
+        // 2. Vòng lặp kiểm tra liên tục (Watchdog) - 1 giây/lần
+        const interval = setInterval(performSync, 1000);
+
+        // 3. Event Listeners cho trường hợp mạng yếu (Weak Wifi Handling)
+        // Khi mạng lag, video sẽ rơi vào trạng thái 'waiting' hoặc 'stalled'.
+        // Ngay khi mạng có lại, video chuyển sang 'playing'. Lúc này ta KHÔNG chờ interval (có thể mất 1s),
+        // mà ta buộc sync NGAY LẬP TỨC để bắt kịp các máy khác.
+        const onBufferRecovery = () => {
+            console.log("📶 Network recovered / Video playing. Forcing sync...");
+            performSync();
+        };
+
+        const videoEl = videoRef.current;
+        videoEl.addEventListener('playing', onBufferRecovery);
+        videoEl.addEventListener('seeked', onBufferRecovery); // Kiểm tra lại sau khi seek
+
+        return () => {
+            clearInterval(interval);
+            videoEl.removeEventListener('playing', onBufferRecovery);
+            videoEl.removeEventListener('seeked', onBufferRecovery);
+        };
       } else {
         // Khi Inactive: Pause để tiết kiệm tài nguyên
         videoRef.current.pause();
@@ -65,8 +96,8 @@ const MediaLayer = memo(({
           className="w-full h-full object-cover"
           playsInline
           preload="auto"
-          muted={!isActive}
-          loop={true}
+          muted={!isActive} // Mute khi ẩn để tránh lỗi AudioContext
+          loop={false} // Clip chính thường không loop, logic sync sẽ lo việc giữ time
         />
       ) : (
         <iframe
@@ -118,7 +149,7 @@ const ClientView: React.FC = () => {
          LAYER SYSTEM
       */}
       
-      {/* 1. Waiting Layer */}
+      {/* 1. Waiting Layer - Loop = true (xử lý logic trong MediaLayer nếu cần hoặc mặc định video tag) */}
       <MediaLayer 
         url={state.waitingUrl} 
         isActive={isWaiting} 
