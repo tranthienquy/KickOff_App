@@ -179,11 +179,11 @@ const ClientView: React.FC = () => {
               autoPlay muted loop playsInline
             />
           )}
-          <div className="text-center space-y-8 z-10 px-6 b p-12 ">
+          <div className="text-center space-y-8 z-10 px-6 b p-4 ">
             <h1 className="text-4xl md:text-7xl font-orbitron font-bold text-white tracking-tighter drop-shadow-[0_0_15px_rgba(249,115,22,0.8)]">
               {state.titlePrefix} <span className="text-orange-500">{state.titleHighlight}</span> {state.titleSuffix}
             </h1>
-            <div className="flex flex-col gap-4 items-center">
+            <div className="flex flex-col gap-4 items-center ">
               <button 
                 onClick={handleUnlock}
                 className="group relative px-12 py-5 bg-orange-600 hover:bg-orange-500 text-white font-orbitron font-bold text-lg tracking-widest transition-all clip-path-polygon shadow-[0_0_30px_rgba(249,115,22,0.4)] hover:shadow-[0_0_50px_rgba(249,115,22,0.8)] hover:scale-105 active:scale-95"
@@ -197,9 +197,9 @@ const ClientView: React.FC = () => {
         </div>
       )}
 
-      {/* Waiting Overlay Indicator - Moved to bottom-12 */}
-      <div className={`absolute bottom-12 left-1/2 -translate-x-1/2 z-50 transition-opacity duration-500 ${isWaiting && unlocked ? 'opacity-100' : 'opacity-0'}`}>
-        <div className="flex items-center gap-4 px-10 py-3 rounded-full border border-orange-500/60 shadow-[0_0_30px_rgba(249,115,22,0.3)] backdrop-blur-[2px]">
+      {/* Waiting Overlay Indicator - Moved to bottom-4 (very close to edge) */}
+      <div className={`absolute bottom-4 left-1/2 -translate-x-1/2 z-[60] transition-opacity duration-500 ${isWaiting && unlocked ? 'opacity-100' : 'opacity-0'}`}>
+        <div className="flex items-center gap-4 px-10 py-3 rounded-full border border-orange-500/60 shadow-[0_0_30px_rgba(249,115,22,0.3)] backdrop-blur-[2px] bg-black/40">
             <div className="w-3 h-3 bg-orange-500 rounded-full animate-pulse shadow-[0_0_20px_#f97316]"></div>
             <span className="text-sm font-orbitron text-orange-400 font-bold tracking-[0.3em] drop-shadow-[0_2px_8px_rgba(0,0,0,1)]">{state.readyText}</span>
         </div>
