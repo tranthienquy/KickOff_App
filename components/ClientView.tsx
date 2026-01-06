@@ -162,7 +162,7 @@ const ClientView: React.FC = () => {
               autoPlay muted loop playsInline
             />
           )}
-          <div className="text-center space-y-8 z-10 px-6 backdrop-blur-sm p-12 rounded-3xl border border-white/10 bg-black/40 shadow-2xl">
+          <div className="text-center space-y-8 z-10 px-6 b p-12 ">
             <h1 className="text-4xl md:text-7xl font-orbitron font-bold text-white tracking-tighter drop-shadow-[0_0_15px_rgba(249,115,22,0.8)]">
               {state.titlePrefix} <span className="text-orange-500">{state.titleHighlight}</span> {state.titleSuffix}
             </h1>
@@ -174,16 +174,14 @@ const ClientView: React.FC = () => {
               >
                 {state.buttonText || 'ACCESS SYSTEM'}
               </button>
-              <p className="text-[10px] text-orange-500/60 font-mono tracking-[0.2em] animate-pulse">
-                WAITING FOR SIGNAL UPLINK...
-              </p>
+             
             </div>
           </div>
         </div>
       )}
 
-      {/* Waiting Overlay Indicator */}
-      <div className={`absolute bottom-24 left-1/2 -translate-x-1/2 z-50 transition-opacity duration-500 ${isWaiting && unlocked ? 'opacity-100' : 'opacity-0'}`}>
+      {/* Waiting Overlay Indicator - Moved to bottom-12 for better aesthetic */}
+      <div className={`absolute bottom-12 left-1/2 -translate-x-1/2 z-50 transition-opacity duration-500 ${isWaiting && unlocked ? 'opacity-100' : 'opacity-0'}`}>
         <div className="flex items-center gap-4 px-10 py-3 rounded-full border border-orange-500/60 shadow-[0_0_30px_rgba(249,115,22,0.3)] backdrop-blur-[2px]">
             <div className="w-3 h-3 bg-orange-500 rounded-full animate-pulse shadow-[0_0_20px_#f97316]"></div>
             <span className="text-sm font-orbitron text-orange-400 font-bold tracking-[0.3em] drop-shadow-[0_2px_8px_rgba(0,0,0,1)]">{state.readyText}</span>
